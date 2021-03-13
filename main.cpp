@@ -4,6 +4,7 @@
 #include <ctime>
 #include <random>
 #include "CommandLineOptions.h"
+#include <fstream>
 
 using namespace std;
 
@@ -49,7 +50,7 @@ class SPH {
 			
 				v = new double*[N];               	//Velocity of particle
 				
-				vij = new double**[N];              //Array of difference in velocities
+				//vij = new double**[N];              //Array of difference in velocities
 			
 				q = new double*[N]; 				//q array
 			
@@ -83,11 +84,11 @@ class SPH {
 					
 					r[i] = new double*[N];
 					
-					vij[i] = new double*[N];
+					//vij[i] = new double*[N];
 					
 					for (int j = 0; j < N; j++){
 						r[i][j] = new double[2];
-						vij[i][j] = new double[2];   // 2D array of coordinates (array of array of pointers)
+						//vij[i][j] = new double[2];   // 2D array of coordinates (array of array of pointers)
 					}
 				}
 				
@@ -216,7 +217,7 @@ class SPH {
 			void printVIJ(){
 				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
-						cout << vij[i][j][0] << " " << vij[i][j][1];
+						cout << vij[0] << " " << vij[1];
 					}
 					cout << endl;
 				}
@@ -281,8 +282,9 @@ class SPH {
 			
 			
 			//Calculate r array, q array and vij array
-			void calcQRVIJ(int i){
+			void calcQRVIJ(){
 				
+				for (int i = 0; i < N; ++i){
 					for(int j = 0; j < N; ++j){
 						///////
 						//Calc r and q
@@ -302,37 +304,34 @@ class SPH {
 						//////
 						
 						//copy value from v[i] to v[i][j]
-						cblas_dcopy(2, v[i], 1, vij[i][j], 1);
+						//cblas_dcopy(2, v[i], 1, vij[i][j], 1);
 						
 						//Subtract vj from vi using blas, which records the value into r[i][j]
-						cblas_daxpy(2, -1, v[j], 1, vij[i][j], 1);
+						//cblas_daxpy(2, -1, v[j], 1, vij[i][j], 1);
 						
 						
 					}
+				}
 			}
 			
 			//Calculate Density and pressure at the same time
-			void calcRho(int i){
+			void calcRho(){
 				
 				//Define coefficient outside of loop to save time
-				//double coeff = 4.0/(M_PI*h*h);
+				double coeff = m*4.0/(M_PI*h*h);
 				
+				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
 						
 						if (q[i][j] < 1){
 							
-							rho[i] +=  (1 - (q[i][j]*q[i][j]))*(1 - (q[i][j]*q[i][j]))*(1 - (q[i][j]*q[i][j]));
+							rho[i] +=  coeff * (1 - (q[i][j]*q[i][j]))*(1 - (q[i][j]*q[i][j]))*(1 - (q[i][j]*q[i][j]));
 							
-							}
-						
-						else{
-							
-							rho[i] += 0;
 							}
 						}
+					}
 					
-					
-					//cblas_dscal(N, m*coeff_rho , rho, 1); //Multiply matrix of densities by coefficient to save computational time
+					//cblas_dscal(N, m*coeff , rho, 1); //Multiply matrix of densities by coefficient to save computational time
 					
 				}
 			//Calculate Pressure
@@ -394,9 +393,14 @@ class SPH {
 					for (int j = 0; j < N; j++){
 						
 						if ((q[i][j] < 1) && (i != j)){
+							//copy value from v[i] to v[i][j]
+							cblas_dcopy(2, v[i], 1, vij, 1);
+						
+							//Subtract vj from vi using blas, which records the value into r[i][j]
+							cblas_daxpy(2, -1, v[j], 1, vij, 1);
 							
 							//Calculate Fv
-							cblas_daxpy(2, coeff*(1-q[i][j])/rho[j], vij[i][j], 1, Fv[i], 1);
+							cblas_daxpy(2, coeff*(1-q[i][j])/rho[j], vij, 1, Fv[i], 1);
 						}
 					}
 					//cblas_dscal(2, coeff, Fv[i], 1); //Maybe can just pop this into the above calculation? cos its literally inlining it...
@@ -485,32 +489,44 @@ class SPH {
 			
 			
 			void solver(){
-				//initArray();
+				//Open Files for output
+				ofstream EnergyOut("energy.txt", ios::out | ios::trunc);
+				
+				if(!EnergyOut.good()){
+					
+					cout << "Energy file could not be opened." << endl;
+				
+				}
+				else{
+					EnergyOut.precision(5);
+					EnergyOut.width(15);
+					EnergyOut << "Time" << " " << "KE" << " " << "PE" << " " << "TE" << endl;
+				}
 				
 				
 				//Initialize time loop
 				double t = 0;
+				cout << "Evaluating..."<< endl;
 				while (t < T){
 				
 					
 					//Initialize Positions of Particles
-					cout << "Step: " << t << endl;
+					//cout << "Step: " << t << endl;
 					
 					
-					cout << "Positions: " << endl;
-					printX();
+					//cout << "Positions: " << endl;
+					//printX();
 					
-					cout << "Velocities: " << endl;
-					printV();
-					//Calculate Density
-					for (int i = 0; i < N; ++i ){
-						calcQRVIJ(i);
-						calcRho(i);
-					}
+					//cout << "Velocities: " << endl;
+					//printV();
 					
-					//Scale Density (Inline)
-					cblas_dscal(N, m*coeff_rho , rho, 1);
 					
+					//Calculate Density and scale mass if first step
+					calcQRVIJ();
+					calcRho();
+					
+					
+														
 					//Calculate Pressure
 					calcP();
 					
@@ -520,24 +536,21 @@ class SPH {
 						scaleMass();
 						
 						//Reset Rho and coefficient before calculating again
-						coeff_rho = 4.0/(M_PI*h*h);
-						
+												
 						cblas_dscal(N, 0.0, rho, 1);
-						for (int i = 0; i < N; ++i){
-							calcRho(i);
 						
-						}
-						cblas_dscal(N, m*coeff_rho , rho, 1);
+						calcRho();
+						
 						//calcP(); //DO I NEED TO DO THIS????? If need, just put it after the scaling (REMEMBER TO PUT THIS BACK!)
 						
 						
 					}
-					printRho();
-					printQ();
-					cout << "Pressure: "<< endl;
-					printP();
-					cout << "Velocity Difference: " << endl;
-					printVIJ();
+					//printRho();
+					//printQ();
+					//cout << "Pressure: "<< endl;
+					//printP();
+					//cout << "Velocity Difference: " << endl;
+					//printVIJ();
 					cout << "Mass: " << endl;
 					printMass();
 					
@@ -546,12 +559,12 @@ class SPH {
 					calcFv();
 					calcFg();
 					
-					printForce();
+					//printForce();
 					//Calculate acceleration
 					calcA();
 					
-					cout << "Acceleration: " << endl;
-					printA();
+					//cout << "Acceleration: " << endl;
+					//printA();
 					
 					//Update values of x and t
 					if (t == 0){
@@ -582,22 +595,26 @@ class SPH {
 					
 					cout << "Updated Positions and velocities: " << endl;
 					
-					printX();
-					printV();
+					//printX();
+					//printV();
 					
 					//Display(Print energy values)
-					cout << "Energies: " << endl;
-					cout << "KE:" << Ek << endl;
-					cout << "PE:" << Ep << endl;
-					cout << "TE:" << Et << endl;
+					//cout << "Energies: " << endl;
+					//cout << "KE:" << Ek << endl;
+					//cout << "PE:" << Ep << endl;
+					//cout << "TE:" << Et << endl;
 					
-					//Reset Values for next iteration
+					//Output Energy values into file
+					EnergyOut << t << " " << Ek << " " << Ep << " " << Et << endl;
+					
+					//Reset Values for next iteration			
+					
 					
 					cblas_dscal(N, 0.0, rho, 1);
 					for (int i = 0; i < N; ++i){
 						for (int j = 0; j < N; ++j){
 							cblas_dscal(2,0.0,r[i][j],1);
-							cblas_dscal(2, 0.0, vij[i][j], 1);
+							cblas_dscal(2, 0.0, vij, 1);
 						}
 						cblas_dscal(2, 0, q[i], 1);
 						cblas_dscal(2, 0, Fv[i], 1);
@@ -612,6 +629,32 @@ class SPH {
 				
 					
 				}
+				//Output particle positions into file
+				ofstream PositionOut("output.txt", ios::out | ios::trunc);
+				
+				if(!PositionOut.good()){
+					
+					cout << "output.txt file could not be opened." << endl;
+				
+				}
+				else {
+					
+					PositionOut.precision(5);
+					PositionOut.width(15);
+					
+					PositionOut<< "x coordinate" << " " <<"y coordinate"<< endl; 
+					for (int i = 0; i < N; ++i){
+						PositionOut << x[i][0] << " " << x[i][1]<< endl;
+					}
+				}
+				
+				
+				
+				//Close files
+				EnergyOut.close(); 
+				PositionOut.close();
+				
+				cout << "Completed" << endl;
 			}
 	
 	
@@ -661,8 +704,8 @@ class SPH {
 			
 			double **v = nullptr;
 			
-			double ***vij = nullptr;
-			
+			//double ***vij = nullptr;
+			double *vij = new double [2];
 			double **q = nullptr;
 			
 			double *rho = nullptr;
@@ -688,7 +731,7 @@ class SPH {
 			string particles;
 			
 			//Initialize calculation Coefficients
-			double coeff_rho = 4.0/(M_PI*h*h);
+			
 			
 			
 	
@@ -722,7 +765,7 @@ int main(int argc, char **argv)
 	
 	//END OF BOOST STUFF
 	
-	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01);
+	SPH test("ic-dam-break", 0.0001, 10, 0.01);
 	test.solver();
 	
 	
