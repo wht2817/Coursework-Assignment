@@ -312,12 +312,11 @@ class SPH {
 			}
 			
 			//Calculate Density and pressure at the same time
-			void calcRho(){
+			void calcRho(int i){
 				
 				//Define coefficient outside of loop to save time
-				double coeff = 4.0/(M_PI*h*h);
+				//double coeff = 4.0/(M_PI*h*h);
 				
-				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
 						
 						if (q[i][j] < 1){
@@ -331,9 +330,9 @@ class SPH {
 							rho[i] += 0;
 							}
 						}
-					}
 					
-					cblas_dscal(N, m*coeff , rho, 1); //Multiply matrix of densities by coefficient to save computational time
+					
+					//cblas_dscal(N, m*coeff_rho , rho, 1); //Multiply matrix of densities by coefficient to save computational time
 					
 				}
 			//Calculate Pressure
@@ -505,11 +504,13 @@ class SPH {
 					printV();
 					//Calculate Density
 					for (int i = 0; i < N; ++i ){
-					calcQRVIJ(i);
+						calcQRVIJ(i);
+						calcRho(i);
 					}
-					calcRho();
-					cout << "First Step Prescaled Density" << endl;
-					printRho();
+					
+					//Scale Density (Inline)
+					cblas_dscal(N, m*coeff_rho , rho, 1);
+					
 					//Calculate Pressure
 					calcP();
 					
@@ -518,9 +519,15 @@ class SPH {
 					if (t == 0){
 						scaleMass();
 						
-						//Reset Rho before calculating again
+						//Reset Rho and coefficient before calculating again
+						coeff_rho = 4.0/(M_PI*h*h);
+						
 						cblas_dscal(N, 0.0, rho, 1);
-						calcRho();
+						for (int i = 0; i < N; ++i){
+							calcRho(i);
+						
+						}
+						cblas_dscal(N, m*coeff_rho , rho, 1);
 						//calcP(); //DO I NEED TO DO THIS????? If need, just put it after the scaling (REMEMBER TO PUT THIS BACK!)
 						
 						
@@ -677,7 +684,11 @@ class SPH {
 			double Et;
 			
 			//Particle Initialization String
+			
 			string particles;
+			
+			//Initialize calculation Coefficients
+			double coeff_rho = 4.0/(M_PI*h*h);
 			
 			
 	
