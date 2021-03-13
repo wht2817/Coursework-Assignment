@@ -100,8 +100,8 @@ class SPH {
 				else if (particles == "ic-two-particles"){ //REMEMBER TO CHANGE BACK TO ORIGINAL TEST CASE
 					x[0][0] = 0.5;
 					x[0][1] = 0.5;
-					x[1][0] = 0.509;
-					x[1][1] = 0.5;
+					x[1][0] = 0.5;
+					x[1][1] = h;
 				}
 				else if (particles == "ic-four-particles"){
 					x[0][0] = 0.505;
@@ -299,16 +299,6 @@ class SPH {
 						//Calculate qij
 						q[i][j] = cblas_dnrm2(2, r[i][j], 1)/h;
 						
-						//////
-						//calc vij
-						//////
-						
-						//copy value from v[i] to v[i][j]
-						//cblas_dcopy(2, v[i], 1, vij[i][j], 1);
-						
-						//Subtract vj from vi using blas, which records the value into r[i][j]
-						//cblas_daxpy(2, -1, v[j], 1, vij[i][j], 1);
-						
 						
 					}
 				}
@@ -343,7 +333,7 @@ class SPH {
 				}
 			}
 			
-			//Scale Mass for initial condition
+			//Scale Mass
 			void scaleMass(){
 				m = N * rho_0/cblas_dasum(N, rho, 1);
 			}
@@ -541,7 +531,7 @@ class SPH {
 						
 						calcRho();
 						
-						//calcP(); //DO I NEED TO DO THIS????? If need, just put it after the scaling (REMEMBER TO PUT THIS BACK!)
+						calcP(); 
 						
 						
 					}
@@ -765,7 +755,7 @@ int main(int argc, char **argv)
 	
 	//END OF BOOST STUFF
 	
-	SPH test("ic-dam-break", 0.0001, 10, 0.01);
+	SPH test("ic-two-particles", 0.0001, 5, 0.01);
 	test.solver();
 	
 	
