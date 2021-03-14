@@ -5,7 +5,7 @@
 #include <random>
 #include "CommandLineOptions.h"
 #include <fstream>
-
+#include "mpi.h"
 using namespace std;
 
 
@@ -14,13 +14,20 @@ class SPH {
 
 	public:
 			//Define Constructor 
-			SPH(string configuration, double pdt, double pT, double ph){
+			SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm, int prank, int psize){
 				
 				//Assign values to private variable
 				dt = pdt;
 				T  = pT;
 				h = ph;
 				particles = configuration;
+				
+				this -> comm = pcomm;
+				this -> rank = prank;
+				this -> size = psize;
+				//comm = pcomm;
+				//rank = prank;
+				//size = psize;
 				
 				//Assign number of particles based on option chosen by user
 				if (particles == "ic-one-particle"){
@@ -53,6 +60,8 @@ class SPH {
 				//vij = new double**[N];              //Array of difference in velocities
 			
 				q = new double*[N]; 				//q array
+				
+				qr = new double*[N];
 			
 				rho = new double[N];                //Density
 			
@@ -82,6 +91,8 @@ class SPH {
 					
 					q[i] = new double[N];
 					
+					qr[i] = new double[N];
+					
 					r[i] = new double*[N];
 					
 					//vij[i] = new double*[N];
@@ -100,8 +111,8 @@ class SPH {
 				else if (particles == "ic-two-particles"){ //REMEMBER TO CHANGE BACK TO ORIGINAL TEST CASE
 					x[0][0] = 0.5;
 					x[0][1] = 0.5;
-					x[1][0] = 0.5;
-					x[1][1] = h;
+					x[1][0] = 0.509;
+					x[1][1] = 0.5;
 				}
 				else if (particles == "ic-four-particles"){
 					x[0][0] = 0.505;
@@ -207,7 +218,7 @@ class SPH {
 				cout << "Q Array: " << endl;
 				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
-						cout << q[i][j] << " ";
+						cout << qr[i][j] << " ";
 					}
 					cout << endl;
 				}
@@ -479,7 +490,11 @@ class SPH {
 			
 			
 			void solver(){
-				//Open Files for output
+				
+				
+				
+				
+				
 				ofstream EnergyOut("energy.txt", ios::out | ios::trunc);
 				
 				if(!EnergyOut.good()){
@@ -512,17 +527,27 @@ class SPH {
 					
 					
 					//Calculate Density and scale mass if first step
-					calcQRVIJ();
-					calcRho();
+					
+					if (rank == 1){
+						calcQRVIJ();
+						
+					}
 					
 					
-														
+					
+					MPI_Allgather(q, N*N, MPI_DOUBLE, qr, N*N, MPI_DOUBLE, comm);
+					//MPI_Gather(q, N*N, MPI_DOUBLE, qr, N*N, MPI_DOUBLE, 0, comm);	
+													
 					//Calculate Pressure
-					calcP();
+					
 					
 					
 					//Scale mass and calculate density again
 					if (t == 0){
+						
+						calcRho();
+						
+						calcP(); //REMEMBER TO REMOVE
 						scaleMass();
 						
 						//Reset Rho and coefficient before calculating again
@@ -531,18 +556,32 @@ class SPH {
 						
 						calcRho();
 						
-						calcP(); 
+						//calcP();  //REMEMBER TO UNCOMMENT
 						
 						
 					}
+					else{
+						calcRho();
+					
+					
+														
+						//Calculate Pressure
+						calcP();
+						
+					}
 					//printRho();
-					//printQ();
+					if (rank == 0){
+						
+					cout <<"Gathered Q: " << endl;	
+					printQ();
+					
+					}
 					//cout << "Pressure: "<< endl;
 					//printP();
 					//cout << "Velocity Difference: " << endl;
 					//printVIJ();
 					cout << "Mass: " << endl;
-					printMass();
+					//printMass();
 					
 					//Caculate Forces
 					calcFp();
@@ -644,6 +683,7 @@ class SPH {
 				EnergyOut.close(); 
 				PositionOut.close();
 				
+				
 				cout << "Completed" << endl;
 			}
 	
@@ -696,7 +736,10 @@ class SPH {
 			
 			//double ***vij = nullptr;
 			double *vij = new double [2];
+			
 			double **q = nullptr;
+			
+			double **qr = nullptr;
 			
 			double *rho = nullptr;
 			
@@ -720,8 +763,10 @@ class SPH {
 			
 			string particles;
 			
-			//Initialize calculation Coefficients
-			
+			//Initialize Communicator
+			MPI_Comm comm;
+			int rank;
+			int size;
 			
 			
 	
@@ -730,7 +775,7 @@ class SPH {
 	
 };
 
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
     
 	//START OF  BOOST STUFF
@@ -755,9 +800,18 @@ int main(int argc, char **argv)
 	
 	//END OF BOOST STUFF
 	
-	SPH test("ic-two-particles", 0.0001, 5, 0.01);
+	MPI_Init(&argc, &argv);
+	int rank, size;
+	
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	
+	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
+	
+	
 	test.solver();
 	
 	
+	MPI_Finalize();
 	return 0;
 }
