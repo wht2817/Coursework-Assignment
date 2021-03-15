@@ -5,7 +5,7 @@
 #include <random>
 #include "CommandLineOptions.h"
 #include <fstream>
-#include "mpi.h"
+//#include "mpi.h"
 using namespace std;
 
 
@@ -14,7 +14,7 @@ class SPH {
 
 	public:
 			//Define Constructor 
-			SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm, int prank, int psize){
+			SPH(string configuration, double pdt, double pT, double ph){//, MPI_Comm pcomm, int prank, int psize){
 				
 				//Assign values to private variable
 				dt = pdt;
@@ -22,9 +22,9 @@ class SPH {
 				h = ph;
 				particles = configuration;
 				
-				this -> comm = pcomm;
-				this -> rank = prank;
-				this -> size = psize;
+				//this -> comm = pcomm;
+				//this -> rank = prank;
+				//this -> size = psize;
 				//comm = pcomm;
 				//rank = prank;
 				//size = psize;
@@ -52,14 +52,14 @@ class SPH {
 				//Allocating Memory to variable arrays within constructor
 				
 				x = new double*[N];					//Position of particles
-			
-				r = new double**[N];                //Array of difference in displacement
+				xpool = new double[N*2];
+				//r = new double**[N];                //Array of difference in displacement
 			
 				v = new double*[N];               	//Velocity of particle
-				
+				vpool = new double[N*2];
 				//vij = new double**[N];              //Array of difference in velocities
 			
-				q = new double*[N]; 				//q array
+				q = new double[N*N]; 				//q array
 				
 				qr = new double*[N];
 			
@@ -76,8 +76,13 @@ class SPH {
 			
 				a  = new double*[N];              	 //Acceleration
 				
+				//Try contiguous thing
+				for (int i = 0; i < N; ++i, xpool += 2){
+					x[i] = xpool;
+				}
+				
 				for (int i = 0; i < N; i++){
-					x[i] = new double[2];
+					//x[i] = new double[2];
 					
 					v[i] = new double[2];
 					
@@ -89,18 +94,18 @@ class SPH {
 					
 					a[i]  = new double[2];
 					
-					q[i] = new double[N];
+					//q[i] = new double[N];
 					
 					qr[i] = new double[N];
 					
-					r[i] = new double*[N];
+					//r[i] = new double*[N];
 					
 					//vij[i] = new double*[N];
 					
-					for (int j = 0; j < N; j++){
-						r[i][j] = new double[2];
+					//for (int j = 0; j < N; j++){
+					//	r[i][j] = new double[2];
 						//vij[i][j] = new double[2];   // 2D array of coordinates (array of array of pointers)
-					}
+					//}
 				}
 				
 				//Initialize Particles within constructor
@@ -218,7 +223,7 @@ class SPH {
 				cout << "Q Array: " << endl;
 				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
-						cout << qr[i][j] << " ";
+						cout << q[i*N + j] << " ";
 					}
 					cout << endl;
 				}
@@ -302,13 +307,13 @@ class SPH {
 						///////
 						
 						//copy value from x[i] to r[i][j]
-						cblas_dcopy(2, x[i], 1, r[i][j], 1);
+						cblas_dcopy(2, x[i], 1, r, 1);
 						
 						//Subtract xj from xi using blas, which records the value into r[i][j]
-						cblas_daxpy(2, -1, x[j], 1, r[i][j], 1);
+						cblas_daxpy(2, -1, x[j], 1, r, 1);
 						
 						//Calculate qij
-						q[i][j] = cblas_dnrm2(2, r[i][j], 1)/h;
+						q[i*N+j] = cblas_dnrm2(2, r, 1)/h;
 						
 						
 					}
@@ -324,9 +329,9 @@ class SPH {
 				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
 						
-						if (q[i][j] < 1){
+						if (q[i*N+j] < 1){
 							
-							rho[i] +=  coeff * (1 - (q[i][j]*q[i][j]))*(1 - (q[i][j]*q[i][j]))*(1 - (q[i][j]*q[i][j]));
+							rho[i] +=  coeff * (1 - (q[i*N+j]*q[i*N+j]))*(1 - (q[i*N+j]*q[i*N+j]))*(1 - (q[i*N+j]*q[i*N+j]));
 							
 							}
 						}
@@ -351,35 +356,43 @@ class SPH {
 			
 			//Calculate Pressure Force
 			
-			void calcFp(){
+			void calcF(){
 				
 				//Calculate coefficient
-				double coeff = (-m/2.0)*(-30.0/(M_PI*h*h*h)); //scale the Fp value at the end
+				double coeff_p = (-m/2.0)*(-30.0/(M_PI*h*h*h)); //scale the Fp value at the end
+				double coeff_v;
+				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
 				
 				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
 							
-							if ((q[i][j] < 1) && (i != j)){
-							
+							if ((q[i*N+j] < 1) && (i != j)){
+								//Calculate Pressure Force
+								//copy value from x[i] to r[i][j]
+								cblas_dcopy(2, x[i], 1, r, 1);
+						
+								//Subtract xj from xi using blas, which records the value into r[i][j]
+								cblas_daxpy(2, -1, x[j], 1, r, 1);
 								//Perform scaling on r vectors. Can be overwrriten as will not be using them anymore
 						
-								cblas_daxpy(2, coeff * (p[i]+p[j])*(1.0-q[i][j])*(1.0-q[i][j])/(rho[j]*q[i][j]),r[i][j],1, Fp[i], 1);
+								cblas_daxpy(2, coeff_p * (p[i]+p[j])*(1.0-q[i*N+j])*(1.0-q[i*N+j])/(rho[j]*q[i*N+j]),r,1, Fp[i], 1);
 						
-								//Add value to appropriate element in Fp matrix
+								//Calculate Viscous Force
+								
+								//copy value from v[i] to v[i][j]
+								cblas_dcopy(2, v[i], 1, vij, 1);
 						
-								//cblas_daxpy(2, 1, r[i][j], 1, Fp[i], 1);
+								//Subtract vj from vi using blas, which records the value into r[i][j]
+								cblas_daxpy(2, -1, v[j], 1, vij, 1);
+							
+								//Calculate Fv
+								cblas_daxpy(2, coeff_v*(1-q[i*N+j])/rho[j], vij, 1, Fv[i], 1);
 							
 							}
-							//Do nothing if the above if condition is not satisfied
-							//else{
-								
-								
-								//cblas_daxpy(2, 0,r[i][j],1, Fp[i], 1);	
-								//cblas_daxpy(2, 1, r[i][j], 1, Fp[i], 1);
-							//}
+							
 					}
-						//Scale Fp matrix by coefficient to get the correct value
-						//cblas_dscal(2, coeff, Fp[i], 1);
+					//Calculate Gravitational Force
+					Fg[i][1] = -rho[i]*g;
 				}
 			}
 			
@@ -387,13 +400,13 @@ class SPH {
 			void calcFv(){
 				
 				//Calculate Coefficient
-				double coeff;
-				coeff = -40.0*mu*m/(M_PI*h*h*h*h);
+				double coeff_v;
+				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
 				
 				for (int i = 0; i < N; i++){
 					for (int j = 0; j < N; j++){
 						
-						if ((q[i][j] < 1) && (i != j)){
+						if ((q[i*N+j] < 1) && (i != j)){
 							//copy value from v[i] to v[i][j]
 							cblas_dcopy(2, v[i], 1, vij, 1);
 						
@@ -401,7 +414,7 @@ class SPH {
 							cblas_daxpy(2, -1, v[j], 1, vij, 1);
 							
 							//Calculate Fv
-							cblas_daxpy(2, coeff*(1-q[i][j])/rho[j], vij, 1, Fv[i], 1);
+							cblas_daxpy(2, coeff_v*(1-q[i*N+j])/rho[j], vij, 1, Fv[i], 1);
 						}
 					}
 					//cblas_dscal(2, coeff, Fv[i], 1); //Maybe can just pop this into the above calculation? cos its literally inlining it...
@@ -513,7 +526,6 @@ class SPH {
 				double t = 0;
 				cout << "Evaluating..."<< endl;
 				while (t < T){
-				
 					
 					//Initialize Positions of Particles
 					//cout << "Step: " << t << endl;
@@ -528,14 +540,23 @@ class SPH {
 					
 					//Calculate Density and scale mass if first step
 					
-					if (rank == 1){
+					//if (rank == 1){
 						calcQRVIJ();
-						
-					}
+						//for (int i = 0 ; i < N; ++i){
+						//MPI_Send(q[0],N, MPI_DOUBLE, 0, 0, comm);
+						//}
+					//}
+					//else{
+						//for (int i = 0; i < N; ++i)
+						//MPI_Recv(qr[0], N, MPI_DOUBLE, 1, 0, comm, MPI_STATUS_IGNORE);
+					//}
 					
 					
 					
-					MPI_Allgather(q, N*N, MPI_DOUBLE, qr, N*N, MPI_DOUBLE, comm);
+					//for (int i =0; i < N; ++i){
+					//	MPI_Gather(q[i], N, MPI_DOUBLE, q[i], N, MPI_DOUBLE,0 ,comm);
+					
+					//}
 					//MPI_Gather(q, N*N, MPI_DOUBLE, qr, N*N, MPI_DOUBLE, 0, comm);	
 													
 					//Calculate Pressure
@@ -547,7 +568,7 @@ class SPH {
 						
 						calcRho();
 						
-						calcP(); //REMEMBER TO REMOVE
+						//calcP(); //REMEMBER TO REMOVE
 						scaleMass();
 						
 						//Reset Rho and coefficient before calculating again
@@ -556,7 +577,7 @@ class SPH {
 						
 						calcRho();
 						
-						//calcP();  //REMEMBER TO UNCOMMENT
+						calcP();  //REMEMBER TO UNCOMMENT
 						
 						
 					}
@@ -570,12 +591,12 @@ class SPH {
 						
 					}
 					//printRho();
-					if (rank == 0){
+					//if (rank == 0){
 						
-					cout <<"Gathered Q: " << endl;	
-					printQ();
+				//	cout <<"Gathered Q: " << endl;	
+					//printQ();
 					
-					}
+				//	}
 					//cout << "Pressure: "<< endl;
 					//printP();
 					//cout << "Velocity Difference: " << endl;
@@ -584,9 +605,9 @@ class SPH {
 					//printMass();
 					
 					//Caculate Forces
-					calcFp();
-					calcFv();
-					calcFg();
+					calcF();
+					//calcFv();
+					//calcFg();
 					
 					//printForce();
 					//Calculate acceleration
@@ -640,12 +661,14 @@ class SPH {
 					
 					
 					cblas_dscal(N, 0.0, rho, 1);
+					cblas_dscal(2,0.0,r,1);
+					cblas_dscal(2, 0.0, vij, 1);
+					cblas_dscal(N*N, 0.0, q, 1);
 					for (int i = 0; i < N; ++i){
-						for (int j = 0; j < N; ++j){
-							cblas_dscal(2,0.0,r[i][j],1);
-							cblas_dscal(2, 0.0, vij, 1);
-						}
-						cblas_dscal(2, 0, q[i], 1);
+						//for (int j = 0; j < N; ++j){
+							
+						//}
+						//cblas_dscal(2, 0, q[i], 1);
 						cblas_dscal(2, 0, Fv[i], 1);
 						cblas_dscal(2, 0, Fp[i], 1);
 						cblas_dscal(2, 0, Fg[i], 1);
@@ -729,15 +752,16 @@ class SPH {
 			int    N;                  					//No. of particles
 			
 			double **x = nullptr;
+			double *xpool = nullptr;
 			
-			double ***r = nullptr;
+			double *r = new double [2];
 			
 			double **v = nullptr;
-			
+			double *vpool = nullptr;
 			//double ***vij = nullptr;
 			double *vij = new double [2];
 			
-			double **q = nullptr;
+			double *q = nullptr;
 			
 			double **qr = nullptr;
 			
@@ -764,9 +788,9 @@ class SPH {
 			string particles;
 			
 			//Initialize Communicator
-			MPI_Comm comm;
-			int rank;
-			int size;
+			//MPI_Comm comm;
+			//int rank;
+			//int size;
 			
 			
 	
@@ -800,18 +824,19 @@ int main(int argc, char *argv[])
 	
 	//END OF BOOST STUFF
 	
-	MPI_Init(&argc, &argv);
-	int rank, size;
+	//MPI_Init(&argc, &argv);
+	//int rank, size;
 	
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	//MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	//MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
-	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
+	
+	SPH test("ic-droplet", 0.0001, 4, 0.01);//, MPI_COMM_WORLD, rank, size);
 	
 	
 	test.solver();
 	
 	
-	MPI_Finalize();
+	//MPI_Finalize();
 	return 0;
 }
