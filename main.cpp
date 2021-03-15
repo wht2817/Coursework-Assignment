@@ -5,7 +5,7 @@
 #include <random>
 #include "CommandLineOptions.h"
 #include <fstream>
-//#include "mpi.h"
+#include "mpi.h"
 using namespace std;
 
 
@@ -14,7 +14,7 @@ class SPH {
 
 	public:
 			//Define Constructor 
-			SPH(string configuration, double pdt, double pT, double ph){//, MPI_Comm pcomm, int prank, int psize){
+			SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm, int prank, int psize){
 				
 				//Assign values to private variable
 				dt = pdt;
@@ -22,9 +22,9 @@ class SPH {
 				h = ph;
 				particles = configuration;
 				
-				//this -> comm = pcomm;
-				//this -> rank = prank;
-				//this -> size = psize;
+				this -> comm = pcomm;
+				this -> rank = prank;
+				this -> size = psize;
 				//comm = pcomm;
 				//rank = prank;
 				//size = psize;
@@ -48,6 +48,21 @@ class SPH {
 				else if (particles == "ic-droplet"){
 					N = 51;
 				}
+				//Allocate memory for root variables in root process only
+				//if (rank == 0){
+					x_root = new double*[N];
+					x_rootpool = new double[N*2];
+					v_root = new double*[N];
+					v_rootpool = new double[N*2];
+					q_root = new double[N*N];
+					rho_root = new double[N];
+					p_root = new double[N];
+					
+					for (int i = 0; i < N; ++i, x_rootpool += 2, v_rootpool += 2){
+						x_root[i] = x_rootpool;
+						v_root[i] = v_rootpool;
+					}
+				//}
 				
 				//Allocating Memory to variable arrays within constructor
 				
@@ -61,7 +76,7 @@ class SPH {
 			
 				q = new double[N*N]; 				//q array
 				
-				qr = new double*[N];
+				//qr = new double*[N];
 			
 				rho = new double[N];                //Density
 			
@@ -77,14 +92,15 @@ class SPH {
 				a  = new double*[N];              	 //Acceleration
 				
 				//Try contiguous thing
-				for (int i = 0; i < N; ++i, xpool += 2){
+				for (int i = 0; i < N; ++i, xpool += 2, vpool += 2){
 					x[i] = xpool;
+					v[i] = vpool;
 				}
 				
 				for (int i = 0; i < N; i++){
 					//x[i] = new double[2];
 					
-					v[i] = new double[2];
+					//v[i] = new double[2];
 					
 					Fp[i] = new double[2];
 					
@@ -96,7 +112,7 @@ class SPH {
 					
 					//q[i] = new double[N];
 					
-					qr[i] = new double[N];
+					//qr[i] = new double[N];
 					
 					//r[i] = new double*[N];
 					
@@ -206,14 +222,14 @@ class SPH {
 			void printX(){
 				for (int i = 0; i < N; ++i){
 					cout << "Particle "<< i+1 << endl;
-					cout << x[i][0] << " " << x[i][1] << endl;
+					cout << x_root[i][0] << " " << x_root[i][1] << endl;
 				}
 			}
 			
 			void printV(){
 				for (int i = 0; i < N; ++i){
 					cout << "Particle "<< i+1 << endl;
-					cout << v[i][0] << " " << v[i][1] << endl;
+					cout << v_root[i][0] << " " << v_root[i][1] << endl;
 				}
 			}
 			
@@ -223,7 +239,7 @@ class SPH {
 				cout << "Q Array: " << endl;
 				for (int i = 0; i < N; ++i){
 					for (int j = 0; j < N; ++j){
-						cout << q[i*N + j] << " ";
+						cout << q_root[i*N + j] << " ";
 					}
 					cout << endl;
 				}
@@ -254,7 +270,7 @@ class SPH {
 				cout << "Pressure Array: " << endl;
 				
 				for (int i = 0; i < N; ++i){
-					cout << p[i] << " ";
+					cout << p_root[i] << " ";
 				}
 				cout << endl;
 			}
@@ -300,7 +316,7 @@ class SPH {
 			//Calculate r array, q array and vij array
 			void calcQRVIJ(){
 				
-				for (int i = 0; i < N; ++i){
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 					for(int j = 0; j < N; ++j){
 						///////
 						//Calc r and q
@@ -326,12 +342,12 @@ class SPH {
 				//Define coefficient outside of loop to save time
 				double coeff = m*4.0/(M_PI*h*h);
 				
-				for (int i = 0; i < N; ++i){
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 					for (int j = 0; j < N; ++j){
 						
-						if (q[i*N+j] < 1){
+						if (q_root[i*N+j] < 1){
 							
-							rho[i] +=  coeff * (1 - (q[i*N+j]*q[i*N+j]))*(1 - (q[i*N+j]*q[i*N+j]))*(1 - (q[i*N+j]*q[i*N+j]));
+							rho[i] +=  coeff * (1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]));
 							
 							}
 						}
@@ -344,14 +360,14 @@ class SPH {
 	
 			void calcP(){
 				
-				for (int i = 0; i < N; ++i){
-					p[i] = k*(rho[i] - rho_0);
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+					p[i] = k*(rho_root[i] - rho_0);
 				}
 			}
 			
 			//Scale Mass
 			void scaleMass(){
-				m = N * rho_0/cblas_dasum(N, rho, 1);
+				m = N * rho_0/cblas_dasum(N, rho_root, 1);
 			}
 			
 			//Calculate Pressure Force
@@ -363,10 +379,10 @@ class SPH {
 				double coeff_v;
 				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
 				
-				for (int i = 0; i < N; ++i){
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 					for (int j = 0; j < N; ++j){
 							
-							if ((q[i*N+j] < 1) && (i != j)){
+							if ((q_root[i*N+j] < 1) && (i != j)){
 								//Calculate Pressure Force
 								//copy value from x[i] to r[i][j]
 								cblas_dcopy(2, x[i], 1, r, 1);
@@ -375,7 +391,7 @@ class SPH {
 								cblas_daxpy(2, -1, x[j], 1, r, 1);
 								//Perform scaling on r vectors. Can be overwrriten as will not be using them anymore
 						
-								cblas_daxpy(2, coeff_p * (p[i]+p[j])*(1.0-q[i*N+j])*(1.0-q[i*N+j])/(rho[j]*q[i*N+j]),r,1, Fp[i], 1);
+								cblas_daxpy(2, coeff_p * (p_root[i]+p_root[j])*(1.0-q_root[i*N+j])*(1.0-q_root[i*N+j])/(rho_root[j]*q_root[i*N+j]),r,1, Fp[i], 1);
 						
 								//Calculate Viscous Force
 								
@@ -386,13 +402,13 @@ class SPH {
 								cblas_daxpy(2, -1, v[j], 1, vij, 1);
 							
 								//Calculate Fv
-								cblas_daxpy(2, coeff_v*(1-q[i*N+j])/rho[j], vij, 1, Fv[i], 1);
+								cblas_daxpy(2, coeff_v*(1-q_root[i*N+j])/rho_root[j], vij, 1, Fv[i], 1);
 							
 							}
 							
 					}
 					//Calculate Gravitational Force
-					Fg[i][1] = -rho[i]*g;
+					Fg[i][1] = -rho_root[i]*g;
 				}
 			}
 			
@@ -403,10 +419,10 @@ class SPH {
 				double coeff_v;
 				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
 				
-				for (int i = 0; i < N; i++){
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 					for (int j = 0; j < N; j++){
 						
-						if ((q[i*N+j] < 1) && (i != j)){
+						if ((q_root[i*N+j] < 1) && (i != j)){
 							//copy value from v[i] to v[i][j]
 							cblas_dcopy(2, v[i], 1, vij, 1);
 						
@@ -414,7 +430,7 @@ class SPH {
 							cblas_daxpy(2, -1, v[j], 1, vij, 1);
 							
 							//Calculate Fv
-							cblas_daxpy(2, coeff_v*(1-q[i*N+j])/rho[j], vij, 1, Fv[i], 1);
+							cblas_daxpy(2, coeff_v*(1-q_root[i*N+j])/rho_root[j], vij, 1, Fv[i], 1);
 						}
 					}
 					//cblas_dscal(2, coeff, Fv[i], 1); //Maybe can just pop this into the above calculation? cos its literally inlining it...
@@ -424,15 +440,15 @@ class SPH {
 			
 			//Calculate gravitational Force
 			void calcFg(){
-				for (int i = 0; i < N; i++){
-					Fg[i][1] = -rho[i]*g;
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+					Fg[i][1] = -rho_root[i]*g;
 				}
 			}
 			
 			
 			//Enforce boundary condition
 			void calcBC(){
-				for (int i = 0; i < N; i++){
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 					
 					//Right bc
 					if (x[i][0] > (1.0 - h)){
@@ -471,7 +487,7 @@ class SPH {
 				Ep = 0;
 				Et = 0;
 				
-				for (int i = 0; i < N; i++){
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 					
 					Ek += pow(cblas_dnrm2(2, v[i], 1), 2);
 					
@@ -486,7 +502,7 @@ class SPH {
 			
 			//Calculate a
 			void calcA(){
-				for (int i = 0; i < N; i++){
+				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 					//Calculate Fp + Fv first (Value is logged into Fv)
 					cblas_daxpy(2, 1, Fp[i], 1, Fv[i], 1);
 					//Calculate Fp + Fv + Fg (Value is logged into Fv)
@@ -494,7 +510,7 @@ class SPH {
 					//Copy value from Fv to a
 					cblas_dcopy(2, Fv[i], 1, a[i], 1);
 					//Scale value of a by 1/rho[i]
-					cblas_dscal(2, 1.0/rho[i], a[i], 1);
+					cblas_dscal(2, 1.0/rho_root[i], a[i], 1);
 					
 				}
 			}
@@ -506,22 +522,22 @@ class SPH {
 				
 				
 				
+				//if (rank == 0){
 				
+					ofstream EnergyOut("energy.txt", ios::out | ios::trunc);
 				
-				ofstream EnergyOut("energy.txt", ios::out | ios::trunc);
-				
-				if(!EnergyOut.good()){
+					if(!EnergyOut.good()){
 					
-					cout << "Energy file could not be opened." << endl;
+						cout << "Energy file could not be opened." << endl;
 				
-				}
-				else{
-					EnergyOut.precision(5);
-					EnergyOut.width(15);
-					EnergyOut << "Time" << " " << "KE" << " " << "PE" << " " << "TE" << endl;
-				}
+					}
+					else{
+						EnergyOut.precision(5);
+						EnergyOut.width(15);
+						EnergyOut << "Time" << " " << "KE" << " " << "PE" << " " << "TE" << endl;
+					}
 				
-				
+				//}
 				//Initialize time loop
 				double t = 0;
 				cout << "Evaluating..."<< endl;
@@ -538,26 +554,13 @@ class SPH {
 					//printV();
 					
 					
-					//Calculate Density and scale mass if first step
+					calcQRVIJ();
 					
-					//if (rank == 1){
-						calcQRVIJ();
-						//for (int i = 0 ; i < N; ++i){
-						//MPI_Send(q[0],N, MPI_DOUBLE, 0, 0, comm);
-						//}
-					//}
-					//else{
-						//for (int i = 0; i < N; ++i)
-						//MPI_Recv(qr[0], N, MPI_DOUBLE, 1, 0, comm, MPI_STATUS_IGNORE);
-					//}
+					//Reducing q matrix to root and copy values from root to q
+					MPI_Allreduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, comm);
+					//cblas_dcopy(N*N, q_root, 1, q, 1);
 					
-					
-					
-					//for (int i =0; i < N; ++i){
-					//	MPI_Gather(q[i], N, MPI_DOUBLE, q[i], N, MPI_DOUBLE,0 ,comm);
-					
-					//}
-					//MPI_Gather(q, N*N, MPI_DOUBLE, qr, N*N, MPI_DOUBLE, 0, comm);	
+						
 													
 					//Calculate Pressure
 					
@@ -567,8 +570,15 @@ class SPH {
 					if (t == 0){
 						
 						calcRho();
+						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
-						//calcP(); //REMEMBER TO REMOVE
+						calcP(); //REMEMBER TO REMOVE
+						
+						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO REMOVE
+						
+						//cblas_dcopy(N, p_root, 1, p, 1);                     //RMB TO REMOVE
+						
 						scaleMass();
 						
 						//Reset Rho and coefficient before calculating again
@@ -577,39 +587,51 @@ class SPH {
 						
 						calcRho();
 						
-						calcP();  //REMEMBER TO UNCOMMENT
+						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
+						//calcP();  //REMEMBER TO UNCOMMENT
+						//MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
+						
+						//cblas_dcopy(N, p_root, 1, p, 1);     
 						
 					}
 					else{
 						calcRho();
-					
+						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+						//cblas_dcopy(N,rho_root, 1, rho, 1);
 					
 														
 						//Calculate Pressure
 						calcP();
+						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm);
+						//cblas_dcopy(N, p_root, 1, p, 1);
 						
 					}
 					//printRho();
-					//if (rank == 0){
+					if (rank == 0){
 						
-				//	cout <<"Gathered Q: " << endl;	
-					//printQ();
+					cout <<"Gathered Q: " << endl;	
+					printQ();
+					printP();
 					
-				//	}
+					}
 					//cout << "Pressure: "<< endl;
 					//printP();
 					//cout << "Velocity Difference: " << endl;
 					//printVIJ();
-					cout << "Mass: " << endl;
+					//cout << "Mass: " << endl;
 					//printMass();
 					
 					//Caculate Forces
+					
 					calcF();
 					//calcFv();
 					//calcFg();
+					if (rank == 0){
+					printForce();
 					
-					//printForce();
+					}
 					//Calculate acceleration
 					calcA();
 					
@@ -618,7 +640,7 @@ class SPH {
 					
 					//Update values of x and t
 					if (t == 0){
-						for (int i = 0; i < N ; ++i){
+						for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 							
 							//For first time step
 							cblas_daxpy(2, dt/2.0, a[i], 1, v[i], 1); // x
@@ -629,11 +651,15 @@ class SPH {
 					else {
 						
 						//For subsequent time steps
-						for (int i = 0; i < N; ++i){
+						for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
 						cblas_daxpy(2, dt, a[i], 1, v[i], 1); // v
 						cblas_daxpy(2, dt, v[i], 1, x[i], 1); // x
 						}
 					}
+					
+					
+					
+					
 					cout << "Positions before bc: " << endl;
 					//printX();
 					
@@ -642,21 +668,28 @@ class SPH {
 					
 					//Calculate energy
 					calcE();
-					
+					cout << "Rank EK:" << rank << " " << Ek << endl;
+					//Reduce Particle positions and velocities
+					MPI_Allreduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
+					MPI_Allreduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
+					MPI_Reduce(&Ek, &Ek_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
+					MPI_Reduce(&Ep, &Ep_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
+					MPI_Reduce(&Et, &Et_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
 					cout << "Updated Positions and velocities: " << endl;
 					
-					//printX();
-					//printV();
+					printX();
+					printV();
 					
 					//Display(Print energy values)
-					//cout << "Energies: " << endl;
-					//cout << "KE:" << Ek << endl;
-					//cout << "PE:" << Ep << endl;
-					//cout << "TE:" << Et << endl;
+					if (rank == 0){
+						cout << "Energies: " << endl;
+						cout << "KE:" << Ek_root << endl;
+						cout << "PE:" << Ep_root << endl;
+						cout << "TE:" << Et_root << endl;
 					
-					//Output Energy values into file
-					EnergyOut << t << " " << Ek << " " << Ep << " " << Et << endl;
-					
+						//Output Energy values into file
+						EnergyOut << t << " " << Ek << " " << Ep << " " << Et << endl;
+					}
 					//Reset Values for next iteration			
 					
 					
@@ -676,38 +709,46 @@ class SPH {
 					
 					
 					
+					//for (int i = 0; i < N; i++){
+					//	cblas_dcopy(2, x_root[i], 1, x[i], 1);
+					//	cblas_dcopy(2, v_root[i], 1, v[i], 1);
+					//}
+					
+					
 					t += dt;
 					cout << endl;
 				
 					
 				}
-				//Output particle positions into file
-				ofstream PositionOut("output.txt", ios::out | ios::trunc);
+				if (rank == 0){
+					//Output particle positions into file
+					ofstream PositionOut("output.txt", ios::out | ios::trunc);
 				
-				if(!PositionOut.good()){
+					if(!PositionOut.good()){
 					
-					cout << "output.txt file could not be opened." << endl;
+						cout << "output.txt file could not be opened." << endl;
 				
-				}
-				else {
-					
-					PositionOut.precision(5);
-					PositionOut.width(15);
-					
-					PositionOut<< "x coordinate" << " " <<"y coordinate"<< endl; 
-					for (int i = 0; i < N; ++i){
-						PositionOut << x[i][0] << " " << x[i][1]<< endl;
 					}
+					else {
+						
+						PositionOut.precision(5);
+						PositionOut.width(15);
+					
+						PositionOut<< "x coordinate" << " " <<"y coordinate"<< endl; 
+						for (int i = 0; i < N; ++i){
+							PositionOut << x[i][0] << " " << x[i][1]<< endl;
+						}
+					}
+				
+				
+				
+					//Close files
+					EnergyOut.close(); 
+					PositionOut.close();
+				
+				
+					cout << "Completed" << endl;
 				}
-				
-				
-				
-				//Close files
-				EnergyOut.close(); 
-				PositionOut.close();
-				
-				
-				cout << "Completed" << endl;
 			}
 	
 	
@@ -763,7 +804,7 @@ class SPH {
 			
 			double *q = nullptr;
 			
-			double **qr = nullptr;
+			//double **qr = nullptr;
 			
 			double *rho = nullptr;
 			
@@ -777,6 +818,17 @@ class SPH {
 			
 			double **a = nullptr;
 			
+			//Root Parameters
+			double **x_root = nullptr;
+			double *x_rootpool = nullptr;
+			double **v_root = nullptr;
+			double *v_rootpool = nullptr;
+			double *q_root = nullptr;
+			double Ek_root;
+			double Ep_root;
+			double Et_root;
+			double *rho_root = nullptr;
+			double *p_root   = nullptr;
 			
 			//Energy
 			double Ek;
@@ -788,9 +840,9 @@ class SPH {
 			string particles;
 			
 			//Initialize Communicator
-			//MPI_Comm comm;
-			//int rank;
-			//int size;
+			MPI_Comm comm;
+			int rank;
+			int size;
 			
 			
 	
@@ -824,19 +876,19 @@ int main(int argc, char *argv[])
 	
 	//END OF BOOST STUFF
 	
-	//MPI_Init(&argc, &argv);
-	//int rank, size;
+	MPI_Init(&argc, &argv);
+	int rank, size;
 	
-	//MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	//MPI_Comm_size(MPI_COMM_WORLD, &size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	
-	SPH test("ic-droplet", 0.0001, 4, 0.01);//, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
 	
 	
 	test.solver();
 	
 	
-	//MPI_Finalize();
+	MPI_Finalize();
 	return 0;
 }
