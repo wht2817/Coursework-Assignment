@@ -48,7 +48,10 @@ class SPH {
 				else if (particles == "ic-droplet"){
 					N = 51;
 				}
-				//Allocate memory for root variables in root process only
+				
+				//Only allocate memory if rank of proccess is less than N
+
+				//Allocate memory for root variables in all proccesses
 				//if (rank == 0){
 					x_root = new double*[N];
 					x_rootpool = new double[N*2];
@@ -109,44 +112,46 @@ class SPH {
 					Fg[i] = new double[2];
 					
 					a[i]  = new double[2];
-					
-					//q[i] = new double[N];
-					
-					//qr[i] = new double[N];
-					
-					//r[i] = new double*[N];
-					
-					//vij[i] = new double*[N];
-					
-					//for (int j = 0; j < N; j++){
-					//	r[i][j] = new double[2];
-						//vij[i][j] = new double[2];   // 2D array of coordinates (array of array of pointers)
-					//}
+				}
+				
+				//Calculate start and end points of loops for each rank .
+				
+				int r = N % size;
+				int k = (N - r) / size;
+				
+				if (rank < r) {
+					k++;
+					start = k * rank;
+					end   = k * (rank + 1);
+				}
+				else{
+					start = (k + 1) * r + k * (rank -r);
+					end   = (k + 1) * r + k * (rank -r + 1);
 				}
 				
 				//Initialize Particles within constructor
 				if (particles == "ic-one-particle"){
 					x_root[0][0] = 0.5;
 					x_root[0][1] = 0.5;
-					if (rank == 0){
-						x[rank*N/size][0] = 0.5;
-						x[rank*N/size][0] = 0.5;
-					}
+//					if (rank == 0){
+//						x[rank*N/size][0] = 0.5;
+//						x[rank*N/size][0] = 0.5;
+//					}
 				}
 				else if (particles == "ic-two-particles"){ //REMEMBER TO CHANGE BACK TO ORIGINAL TEST CASE
 					x_root[0][0] = 0.5;
 					x_root[0][1] = 0.5;
-					x_root[1][0] = 0.5;
-					x_root[1][1] = h;
+					x_root[1][0] = 0.509;
+					x_root[1][1] = 0.5;
 					
-					if(rank == 1){
-						x[rank*N/size][0] = 0.5;
-						x[rank*N/size][1] = h;
-					}
-					else if (rank == 0){
-						x[rank*N/size][0] = 0.5;
-						x[rank*N/size][1] = 0.5;
-					}
+//					if(rank == 1){
+//						x[start][0] = 0.509;
+//						x[start][1] = 0.5;
+//					}
+//					else if (rank == 0){
+//						x[start][0] = 0.5;
+//						x[start][1] = 0.5;
+//					}
 					
 				}
 				else if (particles == "ic-four-particles"){
@@ -160,6 +165,7 @@ class SPH {
 					x_root[3][1] = 0.45;
 				}
 				else if (particles == "ic-dam-break"){
+					//Assign data for root
 					for (int i = 0; i < 5; ++i){
 						for (int j = 0; j < 5; ++j){
 							//srand(time(0));
@@ -168,6 +174,7 @@ class SPH {
 							x_root[i*5+j][1] = j*0.05 + rand()/(RAND_MAX*100.0);
 						}
 					}
+					
 				}
 				else if (particles == "ic-block-drop"){
 					for (int i = 0; i < 5; ++i){
@@ -327,11 +334,18 @@ class SPH {
 			//Iteration Functions
 			////////////////////////
 			
+			//Initialize by copying appropriate values from x_root to local x in each rank.
+			void initX(){
+				for (int i = start; i < end; ++i){
+					cblas_dcopy(2, x_root[i], 1, x[i], 1);
+				}
+			}
+			
 			
 			//Calculate r array, q array and vij array
 			void calcQRVIJ(){
 				
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+				for (int i = start; i < end; ++i){
 					for(int j = 0; j < N; ++j){
 						///////
 						//Calc r and q
@@ -357,7 +371,7 @@ class SPH {
 				//Define coefficient outside of loop to save time
 				double coeff = m*4.0/(M_PI*h*h);
 				
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+				for (int i = start; i < end; ++i){
 					for (int j = 0; j < N; ++j){
 						
 						if (q_root[i*N+j] < 1){
@@ -394,7 +408,7 @@ class SPH {
 				double coeff_v;
 				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
 				
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+				for (int i = start; i < end; ++i){
 					for (int j = 0; j < N; ++j){
 							
 							if ((q_root[i*N+j] < 1) && (i != j)){
@@ -426,44 +440,11 @@ class SPH {
 					Fg[i][1] = -rho_root[i]*g;
 				}
 			}
-			
-			//Calculate Viscous Force
-			void calcFv(){
-				
-				//Calculate Coefficient
-				double coeff_v;
-				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
-				
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
-					for (int j = 0; j < N; j++){
-						
-						if ((q_root[i*N+j] < 1) && (i != j)){
-							//copy value from v[i] to v[i][j]
-							cblas_dcopy(2, v[i], 1, vij, 1);
-						
-							//Subtract vj from vi using blas, which records the value into r[i][j]
-							cblas_daxpy(2, -1, v_root[j], 1, vij, 1);
-							
-							//Calculate Fv
-							cblas_daxpy(2, coeff_v*(1-q_root[i*N+j])/rho_root[j], vij, 1, Fv[i], 1);
-						}
-					}
-					//cblas_dscal(2, coeff, Fv[i], 1); //Maybe can just pop this into the above calculation? cos its literally inlining it...
-				}
-				
-			}
-			
-			//Calculate gravitational Force
-			void calcFg(){
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
-					Fg[i][1] = -rho_root[i]*g;
-				}
-			}
-			
+					
 			
 			//Enforce boundary condition
 			void calcBC(){
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+				for (int i = start; i < end; ++i){
 					
 					//Right bc
 					if (x[i][0] > (1.0 - h)){
@@ -502,7 +483,7 @@ class SPH {
 				Ep = 0;
 				Et = 0;
 				
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+				for (int i = start; i < end; ++i){
 					
 					Ek += pow(cblas_dnrm2(2, v[i], 1), 2);
 					
@@ -517,7 +498,7 @@ class SPH {
 			
 			//Calculate a
 			void calcA(){
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+				for (int i = start; i < end; ++i){
 					//Calculate Fp + Fv first (Value is logged into Fv)
 					cblas_daxpy(2, 1, Fp[i], 1, Fv[i], 1);
 					//Calculate Fp + Fv + Fg (Value is logged into Fv)
@@ -530,12 +511,22 @@ class SPH {
 				}
 			}
 			
-			//Reset Value
+			bool checksize(){
+				if(rank >= N){
+					return false;
+					
+				}
+					
+				else{
+					return true;
+				}
+			}
 			
 			
 			void solver(){
 				
-				
+				//Initialize x array in indiviudal ranks. 
+				initX();
 				
 				//if (rank == 0){
 				
@@ -572,8 +563,10 @@ class SPH {
 					calcQRVIJ();
 					
 					//Reducing q matrix to root and copy values from root to q
+					
+					
 					MPI_Allreduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, comm);
-					//cblas_dcopy(N*N, q_root, 1, q, 1);
+					
 					
 						
 													
@@ -588,9 +581,9 @@ class SPH {
 						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
-						//calcP(); //REMEMBER TO REMOVE
+						calcP(); //REMEMBER TO REMOVE
 						
-						//MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO REMOVE
+						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO REMOVE
 						
 						//cblas_dcopy(N, p_root, 1, p, 1);                     //RMB TO REMOVE
 						
@@ -605,8 +598,8 @@ class SPH {
 						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
-						calcP();  //REMEMBER TO UNCOMMENT
-						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
+						//calcP();  //REMEMBER TO UNCOMMENT
+						//MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
 						
 						     
 						
@@ -655,7 +648,7 @@ class SPH {
 					
 					//Update values of x and t
 					if (t == 0){
-						for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+						for (int i = start; i < end; ++i){
 							
 							//For first time step
 							cblas_daxpy(2, dt/2.0, a[i], 1, v[i], 1); // x
@@ -666,7 +659,7 @@ class SPH {
 					else {
 						
 						//For subsequent time steps
-						for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+						for (int i = start; i < end; ++i){
 						cblas_daxpy(2, dt, a[i], 1, v[i], 1); // v
 						cblas_daxpy(2, dt, v[i], 1, x[i], 1); // x
 						}
@@ -765,9 +758,9 @@ class SPH {
 				
 					cout << "Completed" << endl;
 				}
+			
+	
 			}
-	
-	
 	
 	
 	
@@ -860,6 +853,11 @@ class SPH {
 			int rank;
 			int size;
 			
+			//Initialize Loop Variables
+			//Start of loop, end of loop
+			int start;
+			int end;
+			
 			
 	
 	
@@ -899,10 +897,12 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	
-	SPH test("ic-two-particles", 0.0001, 10, 0.01, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
 	
-	
-	test.solver();
+	if (test.checksize()){
+		test.solver();
+		
+	}
 	
 	
 	MPI_Finalize();
