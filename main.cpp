@@ -54,12 +54,12 @@ class SPH {
 				//Allocate memory for root variables in all proccesses
 				//if (rank == 0){
 					x_root = new double*[N];
-					x_rootpool = new double[N*2];
+					x_rootpool = new double[N*2]();
 					v_root = new double*[N];
-					v_rootpool = new double[N*2];
-					q_root = new double[N*N];
-					rho_root = new double[N];
-					p_root = new double[N];
+					v_rootpool = new double[N*2]();
+					q_root = new double[N*N]();
+					rho_root = new double[N]();
+					p_root = new double[N]();
 					
 					for (int i = 0; i < N; ++i, x_rootpool += 2, v_rootpool += 2){
 						x_root[i] = x_rootpool;
@@ -70,20 +70,20 @@ class SPH {
 				//Allocating Memory to variable arrays within constructor
 				
 				x = new double*[N];					//Position of particles
-				xpool = new double[N*2];
+				xpool = new double[N*2]();
 				//r = new double**[N];                //Array of difference in displacement
 			
 				v = new double*[N];               	//Velocity of particle
-				vpool = new double[N*2];
+				vpool = new double[N*2]();
 				//vij = new double**[N];              //Array of difference in velocities
 			
-				q = new double[N*N]; 				//q array
+				q = new double[N*N](); 				//q array
 				
 				//qr = new double*[N];
 			
-				rho = new double[N];                //Density
+				rho = new double[N]();                //Density
 			
-				p   = new double[N];                //Pressure
+				p   = new double[N]();                //Pressure
 			
 				//Forces
 				Fp = new double*[N];          	     //Pressure Force
@@ -105,13 +105,13 @@ class SPH {
 					
 					//v[i] = new double[2];
 					
-					Fp[i] = new double[2];
+					Fp[i] = new double[2]();
 					
-					Fv[i] = new double[2];
+					Fv[i] = new double[2]();
 					
-					Fg[i] = new double[2];
+					Fg[i] = new double[2]();
 					
-					a[i]  = new double[2];
+					a[i]  = new double[2]();
 				}
 				
 				//Calculate start and end points of loops for each rank .
@@ -122,11 +122,11 @@ class SPH {
 				if (rank < r) {
 					k++;
 					start = k * rank;
-					end   = k * (rank + 1);
+					finish   = k * (rank + 1);
 				}
 				else{
 					start = (k + 1) * r + k * (rank -r);
-					end   = (k + 1) * r + k * (rank -r + 1);
+					finish   = (k + 1) * r + k * (rank -r + 1);
 				}
 				
 				//Initialize Particles within constructor
@@ -141,8 +141,8 @@ class SPH {
 				else if (particles == "ic-two-particles"){ //REMEMBER TO CHANGE BACK TO ORIGINAL TEST CASE
 					x_root[0][0] = 0.5;
 					x_root[0][1] = 0.5;
-					x_root[1][0] = 0.509;
-					x_root[1][1] = 0.5;
+					x_root[1][0] = 0.5;
+					x_root[1][1] = h;
 					
 //					if(rank == 1){
 //						x[start][0] = 0.509;
@@ -171,7 +171,7 @@ class SPH {
 							//srand(time(0));
 							//srand(time(0));
 							x_root[i*5+j][0] = i*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise 
-							x_root[i*5+j][1] = j*0.05 + rand()/(RAND_MAX*100.0);
+							x_root[i*5+j][1] = j*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise
 						}
 					}
 					
@@ -336,7 +336,7 @@ class SPH {
 			
 			//Initialize by copying appropriate values from x_root to local x in each rank.
 			void initX(){
-				for (int i = start; i < end; ++i){
+				for (int i = start; i < finish; ++i){
 					cblas_dcopy(2, x_root[i], 1, x[i], 1);
 				}
 			}
@@ -345,7 +345,7 @@ class SPH {
 			//Calculate r array, q array and vij array
 			void calcQRVIJ(){
 				
-				for (int i = start; i < end; ++i){
+				for (int i = start; i < finish; ++i){
 					for(int j = 0; j < N; ++j){
 						///////
 						//Calc r and q
@@ -371,7 +371,7 @@ class SPH {
 				//Define coefficient outside of loop to save time
 				double coeff = m*4.0/(M_PI*h*h);
 				
-				for (int i = start; i < end; ++i){
+				for (int i = start; i < finish; ++i){
 					for (int j = 0; j < N; ++j){
 						
 						if (q_root[i*N+j] < 1){
@@ -389,7 +389,7 @@ class SPH {
 	
 			void calcP(){
 				
-				for (int i = rank*N/size; i < (rank+1)*N/size; ++i){
+				for (int i = start; i < finish; ++i){
 					p[i] = k*(rho_root[i] - rho_0);
 				}
 			}
@@ -408,7 +408,7 @@ class SPH {
 				double coeff_v;
 				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
 				
-				for (int i = start; i < end; ++i){
+				for (int i = start; i < finish; ++i){
 					for (int j = 0; j < N; ++j){
 							
 							if ((q_root[i*N+j] < 1) && (i != j)){
@@ -444,7 +444,7 @@ class SPH {
 			
 			//Enforce boundary condition
 			void calcBC(){
-				for (int i = start; i < end; ++i){
+				for (int i = start; i < finish; ++i){
 					
 					//Right bc
 					if (x[i][0] > (1.0 - h)){
@@ -483,7 +483,7 @@ class SPH {
 				Ep = 0;
 				Et = 0;
 				
-				for (int i = start; i < end; ++i){
+				for (int i = start; i < finish; ++i){
 					
 					Ek += pow(cblas_dnrm2(2, v[i], 1), 2);
 					
@@ -498,7 +498,7 @@ class SPH {
 			
 			//Calculate a
 			void calcA(){
-				for (int i = start; i < end; ++i){
+				for (int i = start; i < finish; ++i){
 					//Calculate Fp + Fv first (Value is logged into Fv)
 					cblas_daxpy(2, 1, Fp[i], 1, Fv[i], 1);
 					//Calculate Fp + Fv + Fg (Value is logged into Fv)
@@ -512,7 +512,10 @@ class SPH {
 			}
 			
 			bool checksize(){
-				if(rank >= N){
+				if(size > N){
+					if (rank == 0){
+						cout << "Number of proccesses cannot exceed " << N << " for "<< particles << " case." << endl;
+					}
 					return false;
 					
 				}
@@ -552,9 +555,11 @@ class SPH {
 					//Initialize Positions of Particles
 					//cout << "Step: " << t << endl;
 					
-					
-					//cout << "Positions: " << endl;
-					//printX();
+//					if (rank == 0){
+//					cout << "Initial Positions: " << endl;
+//					printX();
+//					
+//					}
 					
 					//cout << "Velocities: " << endl;
 					//printV();
@@ -581,9 +586,9 @@ class SPH {
 						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
-						calcP(); //REMEMBER TO REMOVE
+						//calcP(); //REMEMBER TO REMOVE
 						
-						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO REMOVE
+						//MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO REMOVE
 						
 						//cblas_dcopy(N, p_root, 1, p, 1);                     //RMB TO REMOVE
 						
@@ -598,8 +603,8 @@ class SPH {
 						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
-						//calcP();  //REMEMBER TO UNCOMMENT
-						//MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
+						calcP();  //REMEMBER TO UNCOMMENT
+						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
 						
 						     
 						
@@ -617,79 +622,84 @@ class SPH {
 						
 					}
 					//printRho();
-					if (rank == 0){
-						
-					cout <<"Gathered Q: " << endl;	
-					printQ();
-					printP();
-					
-					}
+//					if (rank == 0){
+//						
+//					cout <<"Gathered Q: " << endl;	
+//					printQ();
+//					printP();
+//					
+//					}
 					//cout << "Pressure: "<< endl;
 					//printP();
 					//cout << "Velocity Difference: " << endl;
 					//printVIJ();
 					//cout << "Mass: " << endl;
-					//printMass();
+//					printMass();
 					
 					//Caculate Forces
 					
 					calcF();
 					//calcFv();
 					//calcFg();
-					if (rank == 0){
-					printForce();
-					
-					}
+//					if (rank == 0){
+//					printRho();
+//					printForce();
+//					
+//					}
 					//Calculate acceleration
 					calcA();
 					
-					//cout << "Acceleration: " << endl;
-					//printA();
-					
+//					if (rank == 0){
+//					cout << "Acceleration: " << endl;
+//					printA();
+//					}
+
 					//Update values of x and t
 					if (t == 0){
-						for (int i = start; i < end; ++i){
+						for (int i = start; i < finish; ++i){
 							
 							//For first time step
-							cblas_daxpy(2, dt/2.0, a[i], 1, v[i], 1); // x
-							cblas_daxpy(2, dt, v[i], 1, x[i], 1);  // v
+							cblas_daxpy(2, dt/2.0, a[i], 1, v[i], 1); // v
+							cblas_daxpy(2, dt, v[i], 1, x[i], 1);  // x
 							
 						}
 					}
 					else {
-						
 						//For subsequent time steps
-						for (int i = start; i < end; ++i){
+						for (int i = start; i < finish; ++i){
 						cblas_daxpy(2, dt, a[i], 1, v[i], 1); // v
 						cblas_daxpy(2, dt, v[i], 1, x[i], 1); // x
 						}
 					}
 					
 					
-					
-					
-					cout << "Positions before bc: " << endl;
-					//printX();
+//					
+//					if (rank == 0){
+//					cout << "Positions and velocitybefore bc: " << endl;
+//					printX();
+//					printV();
+//					}
 					
 					//Validate Boundary conditions
 					calcBC();
 					
 					//Calculate energy
 					calcE();
-					cout << "Rank EK:" << rank << " " << Ek << endl;
+					
+//					cout << "Rank EK:" << rank << " " << Ek << endl;
 					//Reduce Particle positions and velocities
 					MPI_Allreduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
 					MPI_Allreduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
 					MPI_Reduce(&Ek, &Ek_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
 					MPI_Reduce(&Ep, &Ep_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
 					MPI_Reduce(&Et, &Et_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
-					cout << "Updated Positions and velocities: " << endl;
+//					cout << "Updated Positions and velocities: " << endl;
 					
 					
 					//Display(Print energy values)
 					if (rank == 0){
-						printX();
-						printV();
+//						printX();
+//						printV();
 					
 						cout << "Energies: " << endl;
 						cout << "KE:" << Ek_root << endl;
@@ -706,7 +716,7 @@ class SPH {
 					cblas_dscal(2,0.0,r,1);
 					cblas_dscal(2, 0.0, vij, 1);
 					cblas_dscal(N*N, 0.0, q, 1);
-					for (int i = 0; i < N; ++i){
+					for (int i = start; i < finish; ++i){
 						//for (int j = 0; j < N; ++j){
 							
 						//}
@@ -804,12 +814,12 @@ class SPH {
 			double **x = nullptr;
 			double *xpool = nullptr;
 			
-			double *r = new double [2];
+			double *r = new double [2]();
 			
 			double **v = nullptr;
 			double *vpool = nullptr;
 			//double ***vij = nullptr;
-			double *vij = new double [2];
+			double *vij = new double [2]();
 			
 			double *q = nullptr;
 			
@@ -856,7 +866,7 @@ class SPH {
 			//Initialize Loop Variables
 			//Start of loop, end of loop
 			int start;
-			int end;
+			int finish;
 			
 			
 	
@@ -886,7 +896,7 @@ int main(int argc, char *argv[])
 		//return 0;
 	//}
 	
-	//SPH test(InitialCondition, dt, T, h);
+	//SPH test(InitialCondition, dt, T, h, MPI_COMM_WORLD, rank, size);
 	
 	//END OF BOOST STUFF
 	
@@ -897,13 +907,15 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	
-	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-droplet", 0.0001, 10, 0.01, MPI_COMM_WORLD, rank, size);
 	
-	if (test.checksize()){
-		test.solver();
+	if (!test.checksize()){
+		MPI_Finalize();
+		return 0;
 		
 	}
-	
+	//test.printV();
+	test.solver();
 	
 	MPI_Finalize();
 	return 0;
