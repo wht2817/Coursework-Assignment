@@ -126,32 +126,46 @@ class SPH {
 				
 				//Initialize Particles within constructor
 				if (particles == "ic-one-particle"){
-					x[0][0] = 0.5;
-					x[0][1] = 0.5;
+					x_root[0][0] = 0.5;
+					x_root[0][1] = 0.5;
+					if (rank == 0){
+						x[rank*N/size][0] = 0.5;
+						x[rank*N/size][0] = 0.5;
+					}
 				}
 				else if (particles == "ic-two-particles"){ //REMEMBER TO CHANGE BACK TO ORIGINAL TEST CASE
-					x[0][0] = 0.5;
-					x[0][1] = 0.5;
-					x[1][0] = 0.509;
-					x[1][1] = 0.5;
+					x_root[0][0] = 0.5;
+					x_root[0][1] = 0.5;
+					x_root[1][0] = 0.5;
+					x_root[1][1] = h;
+					
+					if(rank == 1){
+						x[rank*N/size][0] = 0.5;
+						x[rank*N/size][1] = h;
+					}
+					else if (rank == 0){
+						x[rank*N/size][0] = 0.5;
+						x[rank*N/size][1] = 0.5;
+					}
+					
 				}
 				else if (particles == "ic-four-particles"){
-					x[0][0] = 0.505;
-					x[0][1] = 0.5;
-					x[1][0] = 0.515;
-					x[1][1] = 0.5;
-					x[2][0] = 0.51;
-					x[2][1] = 0.45;
-					x[3][0] = 0.5;
-					x[3][1] = 0.45;
+					x_root[0][0] = 0.505;
+					x_root[0][1] = 0.5;
+					x_root[1][0] = 0.515;
+					x_root[1][1] = 0.5;
+					x_root[2][0] = 0.51;
+					x_root[2][1] = 0.45;
+					x_root[3][0] = 0.5;
+					x_root[3][1] = 0.45;
 				}
 				else if (particles == "ic-dam-break"){
 					for (int i = 0; i < 5; ++i){
 						for (int j = 0; j < 5; ++j){
 							//srand(time(0));
 							//srand(time(0));
-							x[i*5+j][0] = i*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise 
-							x[i*5+j][1] = j*0.05 + rand()/(RAND_MAX*100.0);
+							x_root[i*5+j][0] = i*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise 
+							x_root[i*5+j][1] = j*0.05 + rand()/(RAND_MAX*100.0);
 						}
 					}
 				}
@@ -160,8 +174,8 @@ class SPH {
 						for (int j = 0; j < 7; ++j){
 							//srand(time(0));
 							//srand(time(0));
-							x[i*7+j][0] = 0.1 + i*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise
-							x[i*7+j][1] = 0.3 + j*0.05 + rand()/(RAND_MAX*100.0);
+							x_root[i*7+j][0] = 0.1 + i*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise
+							x_root[i*7+j][1] = 0.3 + j*0.05 + rand()/(RAND_MAX*100.0);
 							
 							//x[i*7+j][0] = 0.1 + i*(0.2/7.0) + rand()/(RAND_MAX*100.0);
 							//x[i*7+j][1] = 0.3 + j*(0.3/7.0) + rand()/(RAND_MAX*100.0);
@@ -178,15 +192,15 @@ class SPH {
 					int loopdummy = 0;
 					double angledummy = 0.0;
 					
-					x[0][0] = 0.5;
-					x[0][1] = 0.7;
+					x_root[0][0] = 0.5;
+					x_root[0][1] = 0.7;
 					
 					
 					for (int i = 1; i < 5; ++i){
 						for (int j = Npoints[i-1]+loopdummy; j < Npoints[i] + Npoints[i-1] + loopdummy; j++){
 							
-							x[j][0] = 0.5 + R[i]*cos(2.0 * (j-angledummy)*M_PI/Npoints[i]);
-							x[j][1] = 0.7 + R[i]*sin(2.0 * (j-angledummy)*M_PI/Npoints[i]);
+							x_root[j][0] = 0.5 + R[i]*cos(2.0 * (j-angledummy)*M_PI/Npoints[i]);
+							x_root[j][1] = 0.7 + R[i]*sin(2.0 * (j-angledummy)*M_PI/Npoints[i]);
 						}
 						loopdummy += Npoints[i-1];
 						angledummy += Npoints[i];
@@ -286,6 +300,7 @@ class SPH {
 				for (int i = 0; i < N; ++i){
 					cout << Fp[i][0] << " " << Fp[i][1] << endl;
 				}
+
 				
 				cout << "Viscous Force: " << endl;
 				for (int i = 0; i < N; ++i){
@@ -326,7 +341,7 @@ class SPH {
 						cblas_dcopy(2, x[i], 1, r, 1);
 						
 						//Subtract xj from xi using blas, which records the value into r[i][j]
-						cblas_daxpy(2, -1, x[j], 1, r, 1);
+						cblas_daxpy(2, -1, x_root[j], 1, r, 1);
 						
 						//Calculate qij
 						q[i*N+j] = cblas_dnrm2(2, r, 1)/h;
@@ -388,7 +403,7 @@ class SPH {
 								cblas_dcopy(2, x[i], 1, r, 1);
 						
 								//Subtract xj from xi using blas, which records the value into r[i][j]
-								cblas_daxpy(2, -1, x[j], 1, r, 1);
+								cblas_daxpy(2, -1, x_root[j], 1, r, 1);
 								//Perform scaling on r vectors. Can be overwrriten as will not be using them anymore
 						
 								cblas_daxpy(2, coeff_p * (p_root[i]+p_root[j])*(1.0-q_root[i*N+j])*(1.0-q_root[i*N+j])/(rho_root[j]*q_root[i*N+j]),r,1, Fp[i], 1);
@@ -399,7 +414,7 @@ class SPH {
 								cblas_dcopy(2, v[i], 1, vij, 1);
 						
 								//Subtract vj from vi using blas, which records the value into r[i][j]
-								cblas_daxpy(2, -1, v[j], 1, vij, 1);
+								cblas_daxpy(2, -1, v_root[j], 1, vij, 1);
 							
 								//Calculate Fv
 								cblas_daxpy(2, coeff_v*(1-q_root[i*N+j])/rho_root[j], vij, 1, Fv[i], 1);
@@ -427,7 +442,7 @@ class SPH {
 							cblas_dcopy(2, v[i], 1, vij, 1);
 						
 							//Subtract vj from vi using blas, which records the value into r[i][j]
-							cblas_daxpy(2, -1, v[j], 1, vij, 1);
+							cblas_daxpy(2, -1, v_root[j], 1, vij, 1);
 							
 							//Calculate Fv
 							cblas_daxpy(2, coeff_v*(1-q_root[i*N+j])/rho_root[j], vij, 1, Fv[i], 1);
@@ -573,9 +588,9 @@ class SPH {
 						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
-						calcP(); //REMEMBER TO REMOVE
+						//calcP(); //REMEMBER TO REMOVE
 						
-						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO REMOVE
+						//MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO REMOVE
 						
 						//cblas_dcopy(N, p_root, 1, p, 1);                     //RMB TO REMOVE
 						
@@ -590,10 +605,10 @@ class SPH {
 						MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						//cblas_dcopy(N,rho_root, 1, rho, 1);
 						
-						//calcP();  //REMEMBER TO UNCOMMENT
-						//MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
+						calcP();  //REMEMBER TO UNCOMMENT
+						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
 						
-						//cblas_dcopy(N, p_root, 1, p, 1);     
+						     
 						
 					}
 					else{
@@ -677,18 +692,19 @@ class SPH {
 					MPI_Reduce(&Et, &Et_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
 					cout << "Updated Positions and velocities: " << endl;
 					
-					printX();
-					printV();
 					
 					//Display(Print energy values)
 					if (rank == 0){
+						printX();
+						printV();
+					
 						cout << "Energies: " << endl;
 						cout << "KE:" << Ek_root << endl;
 						cout << "PE:" << Ep_root << endl;
 						cout << "TE:" << Et_root << endl;
 					
 						//Output Energy values into file
-						EnergyOut << t << " " << Ek << " " << Ep << " " << Et << endl;
+						EnergyOut << t << " " << Ek_root << " " << Ep_root << " " << Et_root << endl;
 					}
 					//Reset Values for next iteration			
 					
@@ -736,7 +752,7 @@ class SPH {
 					
 						PositionOut<< "x coordinate" << " " <<"y coordinate"<< endl; 
 						for (int i = 0; i < N; ++i){
-							PositionOut << x[i][0] << " " << x[i][1]<< endl;
+							PositionOut << x_root[i][0] << " " << x_root[i][1]<< endl;
 						}
 					}
 				
@@ -883,7 +899,7 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	
-	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-two-particles", 0.0001, 10, 0.01, MPI_COMM_WORLD, rank, size);
 	
 	
 	test.solver();
