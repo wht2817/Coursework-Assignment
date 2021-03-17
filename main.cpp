@@ -369,20 +369,20 @@ class SPH {
 			void calcRho(){
 				
 				//Define coefficient outside of loop to save time
-				double coeff = m*4.0/(M_PI*h*h);
+				
 				
 				for (int i = start; i < finish; ++i){
 					for (int j = 0; j < N; ++j){
 						
 						if (q_root[i*N+j] < 1){
 							
-							rho[i] +=  coeff * (1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]));
+							rho[i] +=  coeff_rho * (1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]));
 							
 							}
 						}
 					}
 					
-					//cblas_dscal(N, m*coeff , rho, 1); //Multiply matrix of densities by coefficient to save computational time
+					//cblas_dscal(N, m*coeff_rho , rho, 1); //Multiply matrix of densities by coefficient to save computational time <==CHECK THIS IN ANALYZER
 					
 				}
 			//Calculate Pressure
@@ -402,11 +402,7 @@ class SPH {
 			//Calculate Pressure Force
 			
 			void calcF(){
-				
-				//Calculate coefficient
-				double coeff_p = (-m/2.0)*(-30.0/(M_PI*h*h*h)); //scale the Fp value at the end
-				double coeff_v;
-				coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);
+			
 				
 				for (int i = start; i < finish; ++i){
 					for (int j = 0; j < N; ++j){
@@ -595,7 +591,9 @@ class SPH {
 						scaleMass();
 						
 						//Reset Rho and coefficient before calculating again
-												
+						
+						coeff_rho = m*4.0/(M_PI*h*h);
+						
 						cblas_dscal(N, 0.0, rho, 1);
 						
 						calcRho();
@@ -606,6 +604,10 @@ class SPH {
 						calcP();  //REMEMBER TO UNCOMMENT
 						MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
 						
+						//Rescale calculate coefficients after mass has been calculated
+						
+						coeff_p   = (-m/2.0)*(-30.0/(M_PI*h*h*h)); //scale the Fp value at the end
+						coeff_v   = -40.0*mu*m/(M_PI*h*h*h*h);
 						     
 						
 					}
@@ -643,7 +645,7 @@ class SPH {
 					//calcFg();
 //					if (rank == 0){
 //					printRho();
-//					printForce();
+					printForce();
 //					
 //					}
 					//Calculate acceleration
@@ -854,6 +856,12 @@ class SPH {
 			double Ep;
 			double Et;
 			
+			//Initialize Coefficients for calculating forces and density
+			
+			double coeff_rho = m*4.0/(M_PI*h*h);            //Density
+			double coeff_p = (-m/2.0)*(-30.0/(M_PI*h*h*h)); //Pressure force
+			double coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);     //Viscous force
+			
 			//Particle Initialization String
 			
 			string particles;
@@ -907,7 +915,7 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	
-	SPH test("ic-droplet", 0.0001, 10, 0.01, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
 	
 	if (!test.checksize()){
 		MPI_Finalize();
