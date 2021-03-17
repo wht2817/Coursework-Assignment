@@ -237,26 +237,14 @@ SPH::~SPH()
 			
 //Print Positions
 void SPH::printX(){
-	
-	int* sendsize = new int[size];
-	
-	int* stride   = new int[size];
-	
-	for (int i = 0; i < size; ++i){
-		
-		sendsize[i] = start - finish;
-		
-		stride[i]   = start;
-	}
-	
-	MPI_Scatterv(x_root, sendsize, stride, MPI_DOUBLE, x, finish - start, MPI_DOUBLE, 0, comm );
-	
-	
-//	for (int i = 0; i < N; ++i)
-//		cout << "Particle "<< i+1 << endl;
-//		cout << x_root[i][0] << " " << x_root[i][1] << endl;
 
-//				}
+	for (int i = 0; i < N; ++i){
+	
+		cout << "Particle "<< i+1 << endl;
+	
+		cout << x_root[i][0] << " " << x_root[i][1] << endl;
+
+	}
 }
 
 //Print Velocity			
@@ -373,7 +361,7 @@ cout << endl;
 //Initialize values in local x matrix from x_root matrix
 
 void SPH::initX(){
-
+	
 	for (int i = start; i < finish; ++i){
 
 		cblas_dcopy(2, x_root[i], 1, x[i], 1);
