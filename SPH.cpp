@@ -64,6 +64,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	p_root     = new double[N]();
 	
 	//Forming contiguous 2D array for x_root and v_root
+	
 	for (int i = 0; i < N; ++i, x_rootpool += 2, v_rootpool += 2){
 		x_root[i] = x_rootpool;
 		v_root[i] = v_rootpool;
@@ -74,8 +75,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 				
 	x = new double*[N];					//Position of particles
 	
-	xpool = new double[N*2]();
-	
+	xpool = new double[N*2]();	
 			
 	v = new double*[N];               	//Velocity of particle
 	
@@ -125,6 +125,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 		finish   = k * (rank + 1);
 	
 	}
+	
 	else{
 		
 		start = (k + 1) * r + k * (rank -r);
@@ -236,13 +237,26 @@ SPH::~SPH()
 			
 //Print Positions
 void SPH::printX(){
+	
+	int* sendsize = new int[size];
+	
+	int* stride   = new int[size];
+	
+	for (int i = 0; i < size; ++i){
+		
+		sendsize[i] = start - finish;
+		
+		stride[i]   = start;
+	}
+	
+	MPI_Scatterv(x_root, sendsize, stride, MPI_DOUBLE, x, finish - start, MPI_DOUBLE, 0, comm );
+	
+	
+//	for (int i = 0; i < N; ++i)
+//		cout << "Particle "<< i+1 << endl;
+//		cout << x_root[i][0] << " " << x_root[i][1] << endl;
 
-	for (int i = 0; i < N; ++i){
-
-		cout << "Particle "<< i+1 << endl;
-		cout << x_root[i][0] << " " << x_root[i][1] << endl;
-
-				}
+//				}
 }
 
 //Print Velocity			
