@@ -222,14 +222,14 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 SPH::~SPH()
 {
 	//deallocate memory
-//	delete[] x;
-//	delete[] xpool;
-//	delete[] x_root;
-//	delete[] x_rootpool;
-//	delete[] v;
-//	delete[] vpool;
-//	delete[] v_rootpool;
-//	delete[] v_root;
+	delete[] x[0];
+	delete[] x;
+	delete[] x_root[0];
+	delete[] x_root;
+	delete[] v[0];
+	delete[] v;
+	delete[] v_root[0];
+	delete[] v_root;
 	delete[] q;
 	delete[] q_root;
 	delete[] rho;
@@ -848,9 +848,9 @@ void SPH::solver(){
 //			printV();
 					
 //			cout << "Energies: " << endl;
-			cout << "KE:" << Ek_root << endl;
-			cout << "PE:" << Ep_root << endl;
-			cout << "TE:" << Et_root << endl;
+//			cout << "KE:" << Ek_root << endl;
+//			cout << "PE:" << Ep_root << endl;
+//			cout << "TE:" << Et_root << endl;
 					
 			//Output Energy values into file
 			EnergyOut << t << " " << Ek_root << " " << Ep_root << " " << Et_root << endl;
