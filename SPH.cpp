@@ -221,7 +221,37 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 
 SPH::~SPH()
 {
-	//DEALLOCATE ARRAYS???
+	//deallocate memory
+//	delete[] x;
+//	delete[] xpool;
+//	delete[] x_root;
+//	delete[] x_rootpool;
+//	delete[] v;
+//	delete[] vpool;
+//	delete[] v_rootpool;
+//	delete[] v_root;
+	delete[] q;
+	delete[] q_root;
+	delete[] rho;
+	delete[] rho_root;
+	delete[] p;
+	delete[] p_root;
+//	
+	for (int i = 0; i < N; ++i){
+		
+		delete[] Fp[i];
+		delete[] Fv[i];
+		delete[] Fg[i];
+		delete[] a[i];
+		
+
+	}
+	
+	delete[] Fp;
+	delete[] Fv;
+	delete[] Fg;
+	delete[] a;
+	
 }
 
 			
@@ -625,8 +655,10 @@ void SPH::solver(){
 		calcQRVIJ();
 					
 		//Reduce q array via MPI_SUM to q_root matrix in all processes for use in calculating density and forces
-					
-		MPI_Allreduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, comm);
+		
+		MPI_Reduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, 0, comm);
+		MPI_Bcast(q_root, N*N, MPI_DOUBLE, 0, comm);
+//		MPI_Allreduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, comm);
 					
 													
 		//If First step, scale mass and recalculate density and force coefficients
@@ -638,7 +670,9 @@ void SPH::solver(){
 
 			//Reduce individual density matrices in each process to rho_root array for use in force calculations
 			
-			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);
+//			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						
 						
 			//calcP(); //REMEMBER TO REMOVE
@@ -658,12 +692,15 @@ void SPH::solver(){
 			
 			//Recalculate Rho and P and reduce to root arrays
 			calcRho();
-						
-			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);						
+//			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						
 			calcP();  //REMEMBER TO UNCOMMENT
-	
-			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
+			
+			MPI_Reduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+			MPI_Bcast(p_root, N, MPI_DOUBLE, 0, comm);
+//			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
 						
 			//Rescale calculate coefficients after mass has been calculated
 						
@@ -679,12 +716,16 @@ void SPH::solver(){
 			//Calculate Density
 			
 			calcRho();
-			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);
+//			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 
 														
 			//Calculate Pressure
 			calcP();
-			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm);
+			MPI_Reduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+			MPI_Bcast(p_root, N, MPI_DOUBLE, 0, comm);
+//			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm);
 
 						
 		}
@@ -756,9 +797,13 @@ void SPH::solver(){
 //		cout << "Rank EK:" << rank << " " << Ek << endl;
 	
 		//Update x_root and v_root by using all reduce so that their values can be used in calculation for next iteration
-	
-		MPI_Allreduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
-		MPI_Allreduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
+		MPI_Reduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
+		MPI_Bcast(&x_root[0][0], N*2, MPI_DOUBLE, 0, comm);
+		MPI_Reduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
+		MPI_Bcast(&v_root[0][0], N*2, MPI_DOUBLE, 0, comm);
+		
+//		MPI_Allreduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
+//		MPI_Allreduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
 
 		//Sum energy contributions from each process onto root process
 	

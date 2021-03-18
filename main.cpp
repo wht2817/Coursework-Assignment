@@ -7,12 +7,14 @@
 #include <fstream>
 #include "mpi.h"
 #include "SPH.h"
+#include <chrono>
 using namespace std;
-
+using namespace std::chrono;
 
 
 int main(int argc, char *argv[])
 {
+	auto begin = high_resolution_clock::now();
     
 	//START OF  BOOST STUFF
 	//Initialize Variables
@@ -43,7 +45,7 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	
-	SPH test("ic-two-particles", 0.0001, 0.0002, 0.01, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-dam-break", 0.0001, 0.0001, 0.01, MPI_COMM_WORLD, rank, size);
 	
 	if (!test.checksize()){
 		MPI_Finalize();
@@ -54,5 +56,11 @@ int main(int argc, char *argv[])
 	test.solver();
 	
 	MPI_Finalize();
+	
+	auto stop = high_resolution_clock::now();
+	
+	auto duration = duration_cast<seconds>(stop - begin);
+	
+	cout << duration.count() << "seconds" << endl;
 	return 0;
 }
