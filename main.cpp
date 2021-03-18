@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	
-	SPH test("ic-dam-break", 0.0001, 0.0001, 0.01, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-dam-break", 0.0001, 5, 0.01, MPI_COMM_WORLD, rank, size);
 	
 	if (!test.checksize()){
 		MPI_Finalize();

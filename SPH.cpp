@@ -403,7 +403,9 @@ void SPH::initX(){
 //Precalculate array of q values
 
 void SPH::calcQRVIJ(){
-				
+	
+	double hprime = 1.0 / h; 
+	
 	for (int i = start; i < finish; ++i){
 		for(int j = 0; j < N; ++j){
 					
@@ -414,7 +416,7 @@ void SPH::calcQRVIJ(){
 			cblas_daxpy(2, -1, x_root[j], 1, r, 1);
 						
 			//Calculate qij
-			q[i*N+j] = cblas_dnrm2(2, r, 1)/h;
+			q[i*N+j] = cblas_dnrm2(2, r, 1) * hprime;
 						
 						
 		}
@@ -425,21 +427,24 @@ void SPH::calcQRVIJ(){
 
 void SPH::calcRho(){
 				
-	//Define coefficient outside of loop to save time
+	//Define q_coeff
+				
+	double q_coeff;
 				
 				
 	for (int i = start; i < finish; ++i){
 		for (int j = 0; j < N; ++j){
 						
 			if (q_root[i*N+j] < 1){
-							
-				rho[i] +=  coeff_rho * (1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]))*(1 - (q_root[i*N+j]*q_root[i*N+j]));
+				
+				q_coeff = 1.0 - (q_root[i* N + j]*q_root[i* N + j]);
+			
+				rho[i] += coeff_rho * q_coeff * q_coeff * q_coeff;
 							
 				}
 			}
 		}
 					
-		//cblas_dscal(N, m*coeff_rho , rho, 1); //Multiply matrix of densities by coefficient to save computational time <==CHECK THIS IN ANALYZER
 					
 }
 //Calculate Pressure
@@ -463,12 +468,18 @@ void SPH::scaleMass(){
 			
 //Calculate Pressure Force
 			
-void SPH::calcF(){
+void SPH::calcFA(){
 				
+	
+	double qcoeff;
+	
 	for (int i = start; i < finish; ++i){
 		for (int j = 0; j < N; ++j){
 				
 			if ((q_root[i*N+j] < 1) && (i != j)){
+				
+				//Precalculate repeated coefficients
+				qcoeff = (1.0-q_root[i* N + j]);
 				
 				//Calculate Pressure Force
 				
@@ -479,7 +490,7 @@ void SPH::calcF(){
 				cblas_daxpy(2, -1, x_root[j], 1, r, 1);
 				
 				//Perform scaling on r vectors. Can be overwrriten as will not be using them anymore
-				cblas_daxpy(2, coeff_p * (p_root[i]+p_root[j])*(1.0-q_root[i*N+j])*(1.0-q_root[i*N+j])/(rho_root[j]*q_root[i*N+j]),r,1, Fp[i], 1);
+				cblas_daxpy(2, coeff_p * (p_root[i]+p_root[j]) * qcoeff * qcoeff/(rho_root[j]*q_root[i* N + j]), r , 1, Fp[i], 1);
 						
 				//Calculate Viscous Force
 								
@@ -490,13 +501,29 @@ void SPH::calcF(){
 				cblas_daxpy(2, -1, v_root[j], 1, vij, 1);
 							
 				//Calculate Fv
-				cblas_daxpy(2, coeff_v*(1-q_root[i*N+j])/rho_root[j], vij, 1, Fv[i], 1);
+				cblas_daxpy(2, coeff_v * qcoeff/rho_root[j], vij, 1, Fv[i], 1);
 							
 			}
 						
 		}
 				//Calculate Gravitational Force
+				
 				Fg[i][1] = -rho_root[i]*g;
+				
+				
+				//Calculate Acceleration
+				
+				//Calculate Fp + Fv first (Value is logged into Fv)
+				cblas_daxpy(2, 1, Fp[i], 1, Fv[i], 1);
+
+				//Calculate Fp + Fv + Fg (Value is logged into Fv)
+				cblas_daxpy(2, 1, Fg[i], 1, Fv[i], 1);
+
+				//Copy value from Fv to a
+				cblas_dcopy(2, Fv[i], 1, a[i], 1);
+
+				//Scale value of a by 1/rho[i]
+				cblas_dscal(2, 1.0/rho_root[i], a[i], 1);
 	}
 }
 					
@@ -656,9 +683,9 @@ void SPH::solver(){
 					
 		//Reduce q array via MPI_SUM to q_root matrix in all processes for use in calculating density and forces
 		
-		MPI_Reduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, 0, comm);
-		MPI_Bcast(q_root, N*N, MPI_DOUBLE, 0, comm);
-//		MPI_Allreduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, comm);
+//		MPI_Reduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, 0, comm);
+//		MPI_Bcast(q_root, N*N, MPI_DOUBLE, 0, comm);
+		MPI_Allreduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, comm);
 					
 													
 		//If First step, scale mass and recalculate density and force coefficients
@@ -670,9 +697,9 @@ void SPH::solver(){
 
 			//Reduce individual density matrices in each process to rho_root array for use in force calculations
 			
-			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);
-//			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+//			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+//			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);
+			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						
 						
 			//calcP(); //REMEMBER TO REMOVE
@@ -681,7 +708,7 @@ void SPH::solver(){
 						
 						
 			//Scale Mass			
-			scaleMass();
+			m = N * rho_0/cblas_dasum(N, rho_root, 1);
 						
 			//Reset Rho and recalculate coefficient before calculating again
 						
@@ -692,15 +719,15 @@ void SPH::solver(){
 			
 			//Recalculate Rho and P and reduce to root arrays
 			calcRho();
-			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);						
-//			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+//			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+//			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);						
+			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						
 			calcP();  //REMEMBER TO UNCOMMENT
 			
-			MPI_Reduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-			MPI_Bcast(p_root, N, MPI_DOUBLE, 0, comm);
-//			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
+//			MPI_Reduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+//			MPI_Bcast(p_root, N, MPI_DOUBLE, 0, comm);
+			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
 						
 			//Rescale calculate coefficients after mass has been calculated
 						
@@ -716,16 +743,16 @@ void SPH::solver(){
 			//Calculate Density
 			
 			calcRho();
-			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);
-//			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
+//			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+//			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);
+			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 
 														
 			//Calculate Pressure
 			calcP();
-			MPI_Reduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-			MPI_Bcast(p_root, N, MPI_DOUBLE, 0, comm);
-//			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm);
+//			MPI_Reduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
+//			MPI_Bcast(p_root, N, MPI_DOUBLE, 0, comm);
+			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm);
 
 						
 		}
@@ -746,11 +773,11 @@ void SPH::solver(){
 		
 		//Caculate Forces
 					
-		calcF();
+		calcFA();
 
 		//Calculate acceleration
 
-		calcA();
+//		calcA();
 					
 //		if (rank == 0){
 //		cout << "Acceleration: " << endl;
@@ -796,14 +823,15 @@ void SPH::solver(){
 					
 //		cout << "Rank EK:" << rank << " " << Ek << endl;
 	
-		//Update x_root and v_root by using all reduce so that their values can be used in calculation for next iteration
-		MPI_Reduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
-		MPI_Bcast(&x_root[0][0], N*2, MPI_DOUBLE, 0, comm);
-		MPI_Reduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
-		MPI_Bcast(&v_root[0][0], N*2, MPI_DOUBLE, 0, comm);
+		//Update x_root and v_root by using reduce and bcast so that their values can be used in calculation for next iteration
 		
-//		MPI_Allreduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
-//		MPI_Allreduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
+//		MPI_Reduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
+//		MPI_Bcast(&x_root[0][0], N*2, MPI_DOUBLE, 0, comm);
+//		MPI_Reduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
+//		MPI_Bcast(&v_root[0][0], N*2, MPI_DOUBLE, 0, comm);
+		
+		MPI_Allreduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
+		MPI_Allreduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
 
 		//Sum energy contributions from each process onto root process
 	
@@ -834,16 +862,16 @@ void SPH::solver(){
 					
 		cblas_dscal(N, 0.0, rho, 1);
 	
-		cblas_dscal(2,0.0,r,1);
+//		cblas_dscal(2,0.0,r,1);
 	
-		cblas_dscal(2, 0.0, vij, 1);
+//		cblas_dscal(2, 0.0, vij, 1);
 	
-		cblas_dscal(N*N, 0.0, q, 1);
+//		cblas_dscal(N*N, 0.0, q, 1);
 	
 		for (int i = start; i < finish; ++i){
 			cblas_dscal(2, 0, Fv[i], 1);
 			cblas_dscal(2, 0, Fp[i], 1);
-			cblas_dscal(2, 0, Fg[i], 1);
+//			cblas_dscal(2, 0, Fg[i], 1);
 		}
 					
 

@@ -64,7 +64,7 @@ public:
 	void calcP();
 			
 	//Calculate All Forces		
-	void calcF();
+	void calcFA();
 			
 	//Enforce boundary condition
 	void calcBC();
@@ -217,6 +217,7 @@ private:
 	int start;
 	
 	int finish;
+
 	
 };
 
