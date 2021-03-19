@@ -37,13 +37,13 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 		N = 4;
 	}
 	else if (particles == "ic-dam-break"){
-		N = 441;
+		N = 400;
 	}
 	else if (particles == "ic-block-drop"){
-		N = 35;
+		N = 651;
 	}
 	else if (particles == "ic-droplet"){
-		N = 51;
+		N = 276;
 	}
 	
 	
@@ -170,11 +170,11 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 
 	else if (particles == "ic-dam-break"){
 
-		for (int i = 0; i < 21; ++i){
-			for (int j = 0; j < 21; ++j){
+		for (int i = 0; i < 20; ++i){
+			for (int j = 0; j < 20; ++j){
 
-				x_root[i*21+j][0] = i*0.01 + rand()/(RAND_MAX*100.0); //Random values for noise 
-				x_root[i*21+j][1] = j*0.01 + rand()/(RAND_MAX*100.0); //Random values for noise
+				x_root[i*20+j][0] = 0.01 +  i*0.01 + rand()/(RAND_MAX*1000.0); //Random values for noise 
+				x_root[i*20+j][1] = 0.01 +  j*0.01 + rand()/(RAND_MAX*1000.0); //Random values for noise
 
 			}
 		}
@@ -183,11 +183,11 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	
 	else if (particles == "ic-block-drop"){
 
-		for (int i = 0; i < 5; ++i){
-			for (int j = 0; j < 7; ++j){
+		for (int i = 0; i < 21; ++i){
+			for (int j = 0; j < 31; ++j){
 
-				x_root[i*7+j][0] = 0.1 + i*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise
-				x_root[i*7+j][1] = 0.3 + j*0.05 + rand()/(RAND_MAX*100.0);
+				x_root[i*31+j][0] = 0.1 + i * 0.01 + rand()/(RAND_MAX*1000.0); //Random values for noise
+				x_root[i*31+j][1] = 0.3 + j * 0.01 + rand()/(RAND_MAX*1000.0);
 				
 			}
 		}
@@ -196,8 +196,8 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	else if (particles == "ic-droplet"){
 				
 		//Initialize plotting parameters
-		int Npoints[5] = {1, 5, 10, 15, 20}; //No. of points on each circumference to give evenly spaced points
-		double R[5]    = {0, 0.025, 0.05, 0.075, 0.1}; // Radii at which the circle will be formed.
+		int Npoints[11] = {1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50}; //No. of points on each circumference to give evenly spaced points
+		double R[11]    = {0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1}; // Radii at which the circle will be formed.
 		
 		//initialize dummy variable to aid in populatin array with evenly spaced points
 		int loopdummy = 0;
@@ -207,7 +207,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 		x_root[0][1] = 0.7;
 					
 					
-		for (int i = 1; i < 5; ++i){
+		for (int i = 1; i < 11; ++i){
 			for (int j = Npoints[i-1]+loopdummy; j < Npoints[i] + Npoints[i-1] + loopdummy; j++){
 				
 				x_root[j][0] = 0.5 + R[i]*cos(2.0 * (j-angledummy)*M_PI/Npoints[i]);
@@ -770,32 +770,14 @@ void SPH::solver(){
 		//Update values of x and t
 	
 		if (t == 0){
-//
-//			for (int i = start; i < finish; ++i){
-//
-//				v[i][0] += a[i][0] * dt/ 2.0;
-//				v[i][1] += a[i][1] * dt/ 2.0;
-//				
-//				x[i][0] += v[i][0] * dt;
-//				x[i][1] += v[i][1] * dt;			
-//			}
-
+			
 			cblas_daxpy((lengthloc)*2, dt/2.0, &a[start][0], 1, &v[start][0], 1);
 			cblas_daxpy((lengthloc)*2, dt, &v[start][0], 1, &x[start][0], 1);
+		
 		}
 	
 		else {
 
-			//For subsequent time steps
-
-//			for (int i = start; i < finish; ++i){
-//	
-//				v[i][0] += a[i][0] * dt;
-//				v[i][1] += a[i][1] * dt;
-//								
-//				x[i][0] += v[i][0] * dt;
-//				x[i][1] += v[i][1] * dt;
-//			}
 			cblas_daxpy((lengthloc)*2, dt, &a[start][0], 1, &v[start][0], 1);
 			cblas_daxpy((lengthloc)*2, dt, &v[start][0], 1, &x[start][0], 1);
 		}
@@ -818,11 +800,6 @@ void SPH::solver(){
 //		cout << "Rank EK:" << rank << " " << Ek << endl;
 	
 		//Update x_root and v_root by using reduce and bcast so that their values can be used in calculation for next iteration
-		
-//		MPI_Reduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
-//		MPI_Bcast(&x_root[0][0], N*2, MPI_DOUBLE, 0, comm);
-//		MPI_Reduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, 0, comm);
-//		MPI_Bcast(&v_root[0][0], N*2, MPI_DOUBLE, 0, comm);
 		
 		MPI_Allreduce(&x[0][0], &x_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
 		MPI_Allreduce(&v[0][0], &v_root[0][0], N*2, MPI_DOUBLE, MPI_SUM, comm);
@@ -855,12 +832,6 @@ void SPH::solver(){
 					
 					
 		cblas_dscal(N, 0.0, rho, 1);
-	
-//		cblas_dscal(2,0.0,r,1);
-	
-//		cblas_dscal(2, 0.0, vij, 1);
-	
-//		cblas_dscal(N*N, 0.0, q, 1);
 	
 		for (int i = start; i < finish; ++i){
 			cblas_dscal(2, 0, Fv[i], 1);
