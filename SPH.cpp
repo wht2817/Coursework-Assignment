@@ -33,6 +33,9 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	else if (particles == "ic-two-particles"){
 		N = 2;
 	}
+	else if (particles == "ic-three-particles"){
+		N = 3;
+	}
 	else if (particles == "ic-four-particles"){
 		N = 4;
 	}
@@ -153,6 +156,15 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 		x_root[1][0] = 0.5;
 		x_root[1][1] = h;
 			
+	}
+	
+	else if (particles == "ic-three-particles"){
+		x_root[0][0] = 0.5;
+		x_root[0][1] = 0.5;
+		x_root[1][0] = 0.495;
+		x_root[1][1] = h;
+		x_root[2][0] = 0.505;
+		x_root[2][1] = h;
 	}
 
 	else if (particles == "ic-four-particles"){
