@@ -19,6 +19,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	dt = pdt;
 	T  = pT;
 	h = ph;
+	hprime = 1.0 / h; 
 	particles = configuration;
 				
 	this -> comm = pcomm;
@@ -36,7 +37,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 		N = 4;
 	}
 	else if (particles == "ic-dam-break"){
-		N = 25;
+		N = 441;
 	}
 	else if (particles == "ic-block-drop"){
 		N = 35;
@@ -95,11 +96,14 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	Fg = new double*[N];             	 //Gravitational Force
 			
 	a  = new double*[N];              	 //Acceleration
+	
+	apool = new double[N*2]();
 				
 	//Form contiguous 2D array for x and v
-	for (int i = 0; i < N; ++i, xpool += 2, vpool += 2){
+	for (int i = 0; i < N; ++i, xpool += 2, vpool += 2, apool += 2){
 		x[i] = xpool;
 		v[i] = vpool;
+		a[i] = apool;
 	}
 				
 	for (int i = 0; i < N; i++){
@@ -110,7 +114,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 					
 	Fg[i] = new double[2]();
 					
-	a[i]  = new double[2]();
+//	a[i]  = new double[2]();
 	}
 				
 	//Calculate start and end points of loops for each rank, and consequently, positions where values are allocated in x from x_root
@@ -132,7 +136,8 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 		finish   = (k + 1) * r + k * (rank -r + 1);
 	
 	}
-				
+	
+	lengthloc = finish - start;
 	//Initialize Particle positions in x_root
 	
 	if (particles == "ic-one-particle"){
@@ -165,11 +170,11 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 
 	else if (particles == "ic-dam-break"){
 
-		for (int i = 0; i < 5; ++i){
-			for (int j = 0; j < 5; ++j){
+		for (int i = 0; i < 21; ++i){
+			for (int j = 0; j < 21; ++j){
 
-				x_root[i*5+j][0] = i*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise 
-				x_root[i*5+j][1] = j*0.05 + rand()/(RAND_MAX*100.0); //Random values for noise
+				x_root[i*21+j][0] = i*0.01 + rand()/(RAND_MAX*100.0); //Random values for noise 
+				x_root[i*21+j][1] = j*0.01 + rand()/(RAND_MAX*100.0); //Random values for noise
 
 			}
 		}
@@ -242,7 +247,7 @@ SPH::~SPH()
 		delete[] Fp[i];
 		delete[] Fv[i];
 		delete[] Fg[i];
-		delete[] a[i];
+//		delete[] a[i];
 		
 
 	}
@@ -250,6 +255,7 @@ SPH::~SPH()
 	delete[] Fp;
 	delete[] Fv;
 	delete[] Fg;
+	delete[] a[0];
 	delete[] a;
 	
 }
@@ -272,7 +278,7 @@ void SPH::printX(){
 	
 		cout << "Particle "<< i+1 << endl;
 	
-		cout << x_root[i][0] << " " << x_root[i][1] << endl;
+		cout << x[i][0] << " " << x[i][1] << endl;
 
 	}
 }
@@ -283,7 +289,7 @@ void SPH::printV(){
 	for (int i = 0; i < N; ++i){
 
 		cout << "Particle "<< i+1 << endl;
-		cout << v_root[i][0] << " " << v_root[i][1] << endl;
+		cout << v[i][0] << " " << v[i][1] << endl;
 
 	}
 }
@@ -392,11 +398,13 @@ cout << endl;
 
 void SPH::initX(){
 	
-	for (int i = start; i < finish; ++i){
-
-		cblas_dcopy(2, x_root[i], 1, x[i], 1);
-
-	}
+	cblas_dcopy(lengthloc*2, &x_root[start][0], 1, &x[start][0], 1);
+	
+//	for (int i = start; i < finish; ++i){
+//
+//		cblas_dcopy(2, x_root[i], 1, x[i], 1);
+//
+//	}
 }
 			
 			
@@ -404,19 +412,17 @@ void SPH::initX(){
 
 void SPH::calcQRVIJ(){
 	
-	double hprime = 1.0 / h; 
+	
 	
 	for (int i = start; i < finish; ++i){
 		for(int j = 0; j < N; ++j){
 					
-			//copy value from x[i] to r
-			cblas_dcopy(2, x[i], 1, r, 1);
+			//Calculate r
+			r[0] = x[i][0] - x_root[j][0];
+			r[1] = x[i][1] - x_root[j][1];
 						
-			//Subtract xj from xi using blas, which records the value into r
-			cblas_daxpy(2, -1, x_root[j], 1, r, 1);
-						
-			//Calculate qij
-			q[i*N+j] = cblas_dnrm2(2, r, 1) * hprime;
+			//Calculate qij 
+			q[i*N+j] = sqrt(r[0] * r[0] + r[1] * r[1]) * hprime;
 						
 						
 		}
@@ -472,6 +478,8 @@ void SPH::calcFA(){
 				
 	
 	double qcoeff;
+	double FP_calc;
+	double FV_calc;
 	
 	for (int i = start; i < finish; ++i){
 		for (int j = 0; j < N; ++j){
@@ -480,50 +488,30 @@ void SPH::calcFA(){
 				
 				//Precalculate repeated coefficients
 				qcoeff = (1.0-q_root[i* N + j]);
-				
-				//Calculate Pressure Force
-				
-				//copy value from x[i] to r
-				cblas_dcopy(2, x[i], 1, r, 1);
-						
-				//Subtract xj from xi using blas, which records the value into r[i][j]
-				cblas_daxpy(2, -1, x_root[j], 1, r, 1);
-				
-				//Perform scaling on r vectors. Can be overwrriten as will not be using them anymore
-				cblas_daxpy(2, coeff_p * (p_root[i]+p_root[j]) * qcoeff * qcoeff/(rho_root[j]*q_root[i* N + j]), r , 1, Fp[i], 1);
-						
-				//Calculate Viscous Force
 								
-				//copy value from v[i] to v[i][j]
-				cblas_dcopy(2, v[i], 1, vij, 1);
+				FP_calc =  (coeff_p * (p[i]+p_root[j]) * qcoeff * qcoeff/(rho_root[j]*q_root[i* N + j]));
+								
+				Fp[i][0] += FP_calc * (x[i][0] - x_root[j][0]);
+
+				Fp[i][1] += FP_calc * (x[i][1] - x_root[j][1]);
 						
-				//Subtract vj from vi using blas, which records the value into r[i][j]
-				cblas_daxpy(2, -1, v_root[j], 1, vij, 1);
-							
-				//Calculate Fv
-				cblas_daxpy(2, coeff_v * qcoeff/rho_root[j], vij, 1, Fv[i], 1);
-							
-			}
+				FV_calc = (coeff_v * qcoeff / rho_root[j]);
+								
+				Fv[i][0] += FV_calc * (v[i][0] - v_root[j][0]);
+				Fv[i][1] += FV_calc * (v[i][1] - v_root[j][1]);
+								
+					
+				}
 						
 		}
-				//Calculate Gravitational Force
-				
-				Fg[i][1] = -rho_root[i]*g;
-				
-				
-				//Calculate Acceleration
-				
-				//Calculate Fp + Fv first (Value is logged into Fv)
-				cblas_daxpy(2, 1, Fp[i], 1, Fv[i], 1);
+		//Calculate Fg
+						
+		Fg[i][1] = -rho_root[i]*g;
+						
+		//Calculate Acceleration
 
-				//Calculate Fp + Fv + Fg (Value is logged into Fv)
-				cblas_daxpy(2, 1, Fg[i], 1, Fv[i], 1);
-
-				//Copy value from Fv to a
-				cblas_dcopy(2, Fv[i], 1, a[i], 1);
-
-				//Scale value of a by 1/rho[i]
-				cblas_dscal(2, 1.0/rho_root[i], a[i], 1);
+		a[i][0] = (Fp[i][0] + Fv[i][0] + Fg[i][0])/rho_root[i];
+		a[i][1] = (Fp[i][1] + Fv[i][1] + Fg[i][1])/rho_root[i];
 	}
 }
 					
@@ -576,7 +564,7 @@ void SPH::calcE(){
 				
 	for (int i = start; i < finish; ++i){
 					
-		Ek += pow(cblas_dnrm2(2, v[i], 1), 2);
+		Ek += (v[i][0] * v[i][0] + v[i][1] * v[i][1]);
 		
 		Ep += x[i][1];
 					
@@ -660,9 +648,11 @@ void SPH::solver(){
 				
 	//Initialize time loop
 	double t = 0;
-
-	cout << "Evaluating..."<< endl;
-
+	
+	if (rank == 0){
+		cout << "Evaluating..."<< endl;
+	}
+	
 	while (t < T){
 					
 					
@@ -683,8 +673,6 @@ void SPH::solver(){
 					
 		//Reduce q array via MPI_SUM to q_root matrix in all processes for use in calculating density and forces
 		
-//		MPI_Reduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, 0, comm);
-//		MPI_Bcast(q_root, N*N, MPI_DOUBLE, 0, comm);
 		MPI_Allreduce(q, q_root, N*N, MPI_DOUBLE, MPI_SUM, comm);
 					
 													
@@ -697,8 +685,6 @@ void SPH::solver(){
 
 			//Reduce individual density matrices in each process to rho_root array for use in force calculations
 			
-//			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-//			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);
 			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						
 						
@@ -719,14 +705,11 @@ void SPH::solver(){
 			
 			//Recalculate Rho and P and reduce to root arrays
 			calcRho();
-//			MPI_Reduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-//			MPI_Bcast(rho_root, N, MPI_DOUBLE, 0, comm);						
+					
 			MPI_Allreduce(rho, rho_root, N, MPI_DOUBLE, MPI_SUM, comm);
 						
 			calcP();  //REMEMBER TO UNCOMMENT
 			
-//			MPI_Reduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, 0, comm);
-//			MPI_Bcast(p_root, N, MPI_DOUBLE, 0, comm);
 			MPI_Allreduce(p, p_root, N, MPI_DOUBLE, MPI_SUM, comm); //RMB TO uncomment
 						
 			//Rescale calculate coefficients after mass has been calculated
@@ -787,32 +770,43 @@ void SPH::solver(){
 		//Update values of x and t
 	
 		if (t == 0){
+//
+//			for (int i = start; i < finish; ++i){
+//
+//				v[i][0] += a[i][0] * dt/ 2.0;
+//				v[i][1] += a[i][1] * dt/ 2.0;
+//				
+//				x[i][0] += v[i][0] * dt;
+//				x[i][1] += v[i][1] * dt;			
+//			}
 
-			for (int i = start; i < finish; ++i){
-
-				//For first time step
-				cblas_daxpy(2, dt/2.0, a[i], 1, v[i], 1); // v
-				cblas_daxpy(2, dt, v[i], 1, x[i], 1);  // x
-							
-			}
+			cblas_daxpy((lengthloc)*2, dt/2.0, &a[start][0], 1, &v[start][0], 1);
+			cblas_daxpy((lengthloc)*2, dt, &v[start][0], 1, &x[start][0], 1);
 		}
 	
 		else {
 
 			//For subsequent time steps
 
-			for (int i = start; i < finish; ++i){
-				cblas_daxpy(2, dt, a[i], 1, v[i], 1); // v
-				cblas_daxpy(2, dt, v[i], 1, x[i], 1); // x
-			}
+//			for (int i = start; i < finish; ++i){
+//	
+//				v[i][0] += a[i][0] * dt;
+//				v[i][1] += a[i][1] * dt;
+//								
+//				x[i][0] += v[i][0] * dt;
+//				x[i][1] += v[i][1] * dt;
+//			}
+			cblas_daxpy((lengthloc)*2, dt, &a[start][0], 1, &v[start][0], 1);
+			cblas_daxpy((lengthloc)*2, dt, &v[start][0], 1, &x[start][0], 1);
 		}
 					
 					
 //					
 //		if (rank == 0){
-//		cout << "Positions and velocitybefore bc: " << endl;
+////		cout << "Positions and velocitybefore bc: " << endl;
 //		printX();
 //		printV();
+//		printA();
 //		}
 					
 		//Validate Boundary conditions
@@ -851,7 +845,7 @@ void SPH::solver(){
 //			cout << "KE:" << Ek_root << endl;
 //			cout << "PE:" << Ep_root << endl;
 //			cout << "TE:" << Et_root << endl;
-					
+//					
 			//Output Energy values into file
 			EnergyOut << t << " " << Ek_root << " " << Ep_root << " " << Et_root << endl;
 	
@@ -915,12 +909,13 @@ void SPH::solver(){
 				
 		//Close files
 
-		EnergyOut.close(); 
 
 		PositionOut.close();
 				
 				
 		cout << "Completed" << endl;
 	}
+	
+		EnergyOut.close();
 			
 }

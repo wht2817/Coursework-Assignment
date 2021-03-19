@@ -148,6 +148,8 @@ private:
 	//Pointer for array storing Acceleration
 	double **a = nullptr;
 	
+	double *apool = nullptr;
+	
 	//Energy
 	double Ek;
 	
@@ -195,6 +197,8 @@ private:
 	double coeff_p = (-m/2.0)*(-30.0/(M_PI*h*h*h)); //Pressure force
 	
 	double coeff_v = -40.0*mu*m/(M_PI*h*h*h*h);     //Viscous force
+	
+	double hprime;                                  // 1.0/h
 			
 	/////		
 	//Particle Initialization String
@@ -217,6 +221,8 @@ private:
 	int start;
 	
 	int finish;
+	
+	int lengthloc;
 
 	
 };
