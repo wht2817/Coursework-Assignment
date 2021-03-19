@@ -223,6 +223,18 @@ private:
 	int finish;
 	
 	int lengthloc;
+	
+	int *sendsize = nullptr;
+	
+	int *stride   = nullptr;
+	
+	int *sendsize_x = nullptr;
+	
+	int *stride_x = nullptr;
+	
+	int *sendsize_q = nullptr;
+	
+	int* stride_q = nullptr;
 
 	
 };

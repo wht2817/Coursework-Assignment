@@ -43,7 +43,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 		N = 651;
 	}
 	else if (particles == "ic-droplet"){
-		N = 276;
+		N = 331;
 	}
 	
 	
@@ -196,7 +196,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	else if (particles == "ic-droplet"){
 				
 		//Initialize plotting parameters
-		int Npoints[11] = {1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50}; //No. of points on each circumference to give evenly spaced points
+		int Npoints[11] = {1, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60}; //No. of points on each circumference to give evenly spaced points
 		double R[11]    = {0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1}; // Radii at which the circle will be formed.
 		
 		//initialize dummy variable to aid in populatin array with evenly spaced points
@@ -523,31 +523,31 @@ void SPH::calcBC(){
 	for (int i = start; i < finish; ++i){
 					
 		//Right bc
-		if (x[i][0] > (1.0 - h)){
+		if (x[i][0] >= (1.0 - h)){
 			
 			x[i][0] = 1.0 - h;
 			v[i][0] = -e * v[i][0];
 		}
 
 		//Left bc
-		else if (x[i][0] < (0.0 + h)){
+		else if (x[i][0] <= h){
 						
-			x[i][0] = 0.0 + h;
+			x[i][0] = h;
 			v[i][0] = -e * v[i][0];
 		}
 					
 		//Top bc
-		if (x[i][1] > (1.0 - h)){
+		if (x[i][1] >= (1.0 - h)){
 						
 			x[i][1] = 1.0 - h;
 			v[i][1] = -e * v[i][1];
 		}
 
 		//Bottom bc
-		else if (x[i][1] < (0.0 + h)){
+		else if (x[i][1] <= h){
 						
-				x[i][1] = 0.0 + h;
-				v[i][1] = -e * v[i][1];
+		x[i][1] = h;
+		v[i][1] = -e * v[i][1];
 		}
 			
 	}
@@ -816,6 +816,7 @@ void SPH::solver(){
 		//Display(Print energy values)
 		if (rank == 0){
 //			printX();
+//			printRho();
 //			printV();
 					
 //			cout << "Energies: " << endl;
