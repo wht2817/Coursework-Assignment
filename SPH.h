@@ -47,6 +47,16 @@ public:
 	//Iteration Functions
 	/////
 	
+	//Initialize parameters to aid in distributing work among proccesses
+	void initMPIVariables();
+	
+	//Initialize Particles
+	
+	void initRootParticles();
+	
+	//Initialize Local Particles
+	void initLocParticles();
+	
 	//Initialize values in local x matrix from x_root matrix
 	
 	void initX();
@@ -54,18 +64,15 @@ public:
 	//Precalculate array of q values
 	void calcQRVIJ();
 	
-	//Gather Q (Testing Only)
-	void gatherQ();		
 	//Calculate Density array
 	void calcRho();
-	void gatherRho();
 	
 	//Scale Mass
 	void scaleMass();
 	
 	//Calculate Pressure
 	void calcP();
-	void gatherP();
+
 	//Calculate All Forces		
 	void calcFA();
 			
@@ -78,14 +85,6 @@ public:
 	//Calculate Acceleration
 	void calcA();
 	
-	//Check if No. of proccsses exceeds no. of particles.		
-	bool checksize();
-	
-	void gatherXV();
-	
-	void gatherE();
-	
-	void calcX();
 	
 	
 	/////
@@ -181,8 +180,6 @@ private:
 	
 	double *v_rootpool = nullptr;
 	
-	double *q_root = nullptr;
-	
 	double Ek_root;
 	
 	double Ep_root;
@@ -236,10 +233,6 @@ private:
 	int *sendsizex;
 	
 	int *stridex;
-	
-	int *sendsizeq;
-	
-	int *strideq;
 	
 	int *sendsize;
 	
