@@ -8,9 +8,10 @@ using namespace std;
 
 namespace po = boost::program_options;
 
-bool Options(int argc, char** argv, po::variables_map &vm, string &InitialCondition, double &dt, double &T, double &h){
-	
-	try{
+void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondition, double &dt, double &T, double &h){
+		
+		//Initialize dummy count variable to help catch exceptions
+		int dummycount = 0;
 		
 		po::options_description desc("Available Options");
 		desc.add_options()
@@ -19,8 +20,9 @@ bool Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 			("ic-droplet", "Use droplet initial condition")
 			("ic-block-drop", "Use block drop initial condition")
 			("ic-one-particle", "Use one particle validation case")
-			("ic-two-particles", "Use two particle validation case")
-			("ic-four-particles", "Use four particle validation case")
+			("ic-two-particles", "Use two particles validation case")
+			("ic-three-particles", "Use three particles validation case")
+			("ic-four-particles", "Use four particles validation case")
 			("dt", po::value<double>(), "Select time step")
 			("T", po::value<double>(), "Total integration time")
 			("h", po::value<double>(), "Radius of influence per particle");
@@ -29,52 +31,80 @@ bool Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 		po::notify(vm);
 	
 		if (vm.count("help")){
+			
 			cout << desc << endl;
-			return true;
+			
 		}
 		
 		if (vm.count("ic-dam-break")){
+			
 			InitialCondition = "ic-dam-break";
+			
+			dummycount++;
+		
 		}
 		
 		if (vm.count("ic-droplet")){
+			
 			InitialCondition = "ic-droplet";
+			
+			dummycount++;
+		
 		}
 		
 		if (vm.count("ic-block-drop")){
+			
 			InitialCondition = "ic-block-drop";
+	
+			dummycount++;
+			
 		}
 		
 		if (vm.count("ic-one-particle")){
+		
 			InitialCondition = "ic-one-particle";
+			
+			dummycount++;
+		
 		}
 		
 		if (vm.count("ic-two-particles")){
+			
 			InitialCondition = "ic-two-particles";
+			
+			dummycount++;
+		
 		}
 		if (vm.count("ic-four-particles")){
+			
 			InitialCondition = "ic-four-particles";
+			
+			dummycount++;
+		
 		} 
 		
 		if ((vm["dt"].as<double>() <= 0) || (vm["T"].as<double>() <= 0) || (vm["h"].as<double>() <= 0)){
-			cout << "Please provide positive values of dt, T and h. " << endl;
-			return false;
+			
+			throw std::logic_error("dt, T and h must be greater than 0");
+			
+			
+		
 		}
 		else {
+			
 			dt = vm["dt"].as<double>();
+			
 			T  = vm["T"].as<double>();
+			
 			h  = vm["h"].as<double>();
+		
 		}
 		
-	}
-	//Throw exceptions if there are invalid inputs
-	catch(exception const &e){
-		
-		cout << e.what() << endl;
-		return false;
-	}
-	
-	return true;
+		if (dummycount > 1){
+			
+			throw std::logic_error("Can only have 1 initialization condition.");
+			
+		}
 	
 	
 }

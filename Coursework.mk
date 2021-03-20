@@ -13,7 +13,7 @@ CurrentFileName        :=
 CurrentFilePath        :=
 CurrentFileFullPath    :=
 User                   :=Wei Tin
-Date                   :=13/03/21
+Date                   :=20/03/21
 CodeLitePath           :=/home/wht2817/.codelite
 LinkerName             :=/usr/bin/g++
 SharedObjectLinkerName :=/usr/bin/g++ -shared -fPIC
@@ -36,11 +36,11 @@ ObjectsFileList        :="Coursework.txt"
 PCHCompileFlags        :=
 MakeDirCommand         :=mkdir -p
 LinkOptions            :=  
-IncludePath            :=  $(IncludeSwitch). $(IncludeSwitch). 
+IncludePath            :=  $(IncludeSwitch). $(IncludeSwitch)/usr/lib/x86_64-linux-gnu/openmpi/include 
 IncludePCH             := 
 RcIncludePath          := 
-Libs                   := $(LibrarySwitch)blas $(LibrarySwitch)boost_program_options 
-ArLibs                 :=  "blas" "boost_program_options" 
+Libs                   := $(LibrarySwitch)mpi_cxx $(LibrarySwitch)mpi $(LibrarySwitch)blas $(LibrarySwitch)boost_program_options 
+ArLibs                 :=  "mpi_cxx" "mpi" "blas" "boost_program_options" 
 LibPath                := $(LibraryPathSwitch). 
 
 ##
@@ -60,7 +60,7 @@ AS       := /usr/bin/as
 ## User defined environment variables
 ##
 CodeLiteDir:=/usr/share/codelite
-Objects0=$(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/CommandLineOptions.cpp$(ObjectSuffix) 
+Objects0=$(IntermediateDirectory)/SPH.cpp$(ObjectSuffix) $(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/CommandLineOptions.cpp$(ObjectSuffix) 
 
 
 
@@ -91,6 +91,14 @@ PreBuild:
 ##
 ## Objects
 ##
+$(IntermediateDirectory)/SPH.cpp$(ObjectSuffix): SPH.cpp $(IntermediateDirectory)/SPH.cpp$(DependSuffix)
+	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/wht2817/Desktop/HPC/Exercises/Exercises/Coursework/SPH.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/SPH.cpp$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/SPH.cpp$(DependSuffix): SPH.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/SPH.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/SPH.cpp$(DependSuffix) -MM SPH.cpp
+
+$(IntermediateDirectory)/SPH.cpp$(PreprocessSuffix): SPH.cpp
+	$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/SPH.cpp$(PreprocessSuffix) SPH.cpp
+
 $(IntermediateDirectory)/main.cpp$(ObjectSuffix): main.cpp $(IntermediateDirectory)/main.cpp$(DependSuffix)
 	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/wht2817/Desktop/HPC/Exercises/Exercises/Coursework/main.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IncludePath)
 $(IntermediateDirectory)/main.cpp$(DependSuffix): main.cpp

@@ -48,26 +48,41 @@ int main(int argc, char *argv[])
 	
 	auto begin = high_resolution_clock::now();
 	
-	SPH test("ic-block-drop", 0.0001, 3, 0.01, MPI_COMM_WORLD, rank, size);
+	try{
+		
+		SPH test("ic-droplet", 0.0001, 0.4, 0.01, MPI_COMM_WORLD, rank, size);
+		
+		test.solver();
 	
-	if (!test.checksize()){
+		
+	
+		if (rank == 0){
+			auto stop = high_resolution_clock::now();
+	
+			auto duration = duration_cast<seconds>(stop - begin);
+	
+			cout << duration.count() << "seconds" << endl;
+		}
 		
 		MPI_Finalize();
-		return 0;
+	}
 		
+	catch (const std::bad_alloc& e) {
+		
+		cout << "An error occured: " << e.what() << endl;
+		
+		MPI_Finalize();
 	}
 	
-
-	test.solver();
+//	
+//	if (test.checksize() == false){
+//		
+//		MPI_Finalize();
+//		return 0;
+//		
+//	}
+//	
+//
 	
-	MPI_Finalize();
-	
-	if (rank == 0){
-		auto stop = high_resolution_clock::now();
-	
-		auto duration = duration_cast<seconds>(stop - begin);
-	
-		cout << duration.count() << "seconds" << endl;
-	}
 	return 0;
 }
