@@ -7,6 +7,7 @@
 #include <fstream>
 #include "mpi.h"
 #include "SPH.h"
+#include <iomanip>
 #include <chrono>
 using namespace std;
 using namespace std::chrono;
@@ -15,6 +16,12 @@ using namespace std::chrono;
 int main(int argc, char *argv[])
 {
 	
+	
+	MPI_Init(&argc, &argv);
+	int rank, size;
+	
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
     
 	//START OF  BOOST STUFF
 	//Initialize Variables
@@ -38,22 +45,19 @@ int main(int argc, char *argv[])
 	
 	//END OF BOOST STUFF
 	
-	MPI_Init(&argc, &argv);
-	int rank, size;
-	
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	
 	auto begin = high_resolution_clock::now();
 	
-	SPH test("ic-four-particles", 0.0001, 4, 0.01, MPI_COMM_WORLD, rank, size);
+	SPH test("ic-block-drop", 0.0001, 3, 0.01, MPI_COMM_WORLD, rank, size);
 	
 	if (!test.checksize()){
+		
 		MPI_Finalize();
 		return 0;
 		
 	}
-	//test.printV();
+	
+
 	test.solver();
 	
 	MPI_Finalize();

@@ -53,16 +53,19 @@ public:
 			
 	//Precalculate array of q values
 	void calcQRVIJ();
-			
+	
+	//Gather Q (Testing Only)
+	void gatherQ();		
 	//Calculate Density array
 	void calcRho();
+	void gatherRho();
 	
 	//Scale Mass
 	void scaleMass();
 	
 	//Calculate Pressure
 	void calcP();
-			
+	void gatherP();
 	//Calculate All Forces		
 	void calcFA();
 			
@@ -77,6 +80,12 @@ public:
 	
 	//Check if No. of proccsses exceeds no. of particles.		
 	bool checksize();
+	
+	void gatherXV();
+	
+	void gatherE();
+	
+	void calcX();
 	
 	
 	/////
@@ -224,18 +233,18 @@ private:
 	
 	int lengthloc;
 	
-	int *sendsize = nullptr;
+	int *sendsizex;
 	
-	int *stride   = nullptr;
+	int *stridex;
 	
-	int *sendsize_x = nullptr;
+	int *sendsizeq;
 	
-	int *stride_x = nullptr;
+	int *strideq;
 	
-	int *sendsize_q = nullptr;
+	int *sendsize;
 	
-	int* stride_q = nullptr;
-
+	int *stride;
+	
 	
 };
 
