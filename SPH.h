@@ -8,7 +8,10 @@ using namespace std;
 class SPH
 {
 public:
-
+	
+	//Delete default constructor (Do not allow object to be created without parameters)
+	SPH() = delete;
+	
 	//Constructor which initializes initial condtion and allocates data based on rank in MPI.
 	SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm, int prank, int psize);
 	
@@ -134,9 +137,6 @@ private:
 	
 	double *vpool = nullptr;
 	
-	//Pointer for array vij = vi - vj;
-	double *vij = new double [2]();
-	
 	//Pointer for array storing q values
 	double *q = nullptr;
 	
@@ -149,9 +149,15 @@ private:
 	//Pointer for array storing Forces
 	double **Fp = nullptr;
 	
+	double *Fppool = nullptr;
+	
 	double **Fv = nullptr;
 	
+	double *Fvpool = nullptr;
+	
 	double **Fg = nullptr;
+	
+	double *Fgpool = nullptr;
 	
 	//Pointer for array storing Acceleration
 	double **a = nullptr;
@@ -164,13 +170,15 @@ private:
 	double Ep;
 	
 	double Et;
-	
 	/////
 	//Root parameters
-//	Contain all the values of x, v, q, rho and p and total Ek, Ep and Et.
-//	Only the energies are stored exclusively on the root, the rest of the parameters can be accessed by all ranks
-//	so that calculation of forces, density and pressure can take place within each rank.
 	/////
+ 
+	/*
+	*Contain all the values of x, v, q, rho and p and total Ek, Ep and Et.
+	*Only the energies are stored exclusively on the root, the rest of the parameters can be accessed by all ranks
+	*so that calculation of forces, density and pressure can take place within each rank.
+	*/
 	
 	double **x_root = nullptr;
 	
@@ -196,7 +204,9 @@ private:
 	//Coefficients for calculating density and forces
 	/////
 	
-//	Only calculated twice per rank in whole code to save time
+	/*Only calculated twice per rank in whole code to save time
+	 *Once when calling constructor and once after scaling mass
+	 */
 			
 	double coeff_rho = m*4.0/(M_PI*h*h);            //Density
 	

@@ -37,6 +37,7 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	this -> size = psize;
 	
 	//Assign number of particles based on option chosen by user
+	
 	if (particles == "ic-one-particle"){
 		N = 1;
 	}
@@ -58,6 +59,8 @@ SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm,
 	else if (particles == "ic-droplet"){
 		N = 331;
 	}
+	
+	//Throw exception if number of processes exceeds number of particles. 
 	
 	if (size > N) {
 		
@@ -103,16 +106,12 @@ SPH::~SPH()
 	delete[] p;
 	
 	delete[] p_root;
-//	
-	for (int i = 0; i < lengthloc; ++i){
-		
-		delete[] Fp[i];
-		
-		delete[] Fv[i];
-		
-		delete[] Fg[i];
-		
-	}
+
+	delete[] Fp[0];
+	
+	delete[] Fg[0];
+	
+	delete[] Fv[0];
 	
 	delete[] Fp;
 	
@@ -123,6 +122,8 @@ SPH::~SPH()
 	delete[] a[0];
 	
 	delete[] a;
+	
+	delete[] r;
 
 	delete[] sendsizex;
 	
@@ -135,14 +136,14 @@ SPH::~SPH()
 }
 
 			
-/////
-//Member Functions
-/////
+/*
+	Member Functions
+*/
 			
 			
-////////////////////
-//Print Functions
-////////////////////
+/*
+	Print Functions
+*/
 			
 			
 //Print Positions
@@ -277,7 +278,7 @@ cout << endl;
 
 void SPH::initMPIVariables(){
 	
-	//Setting up parameters to distribute data evenly
+	//Setting up parameters to distribute data evenly between proccesses
 	
 	int r = N % size;
 	int k = (N - r) / size;
@@ -298,26 +299,29 @@ void SPH::initMPIVariables(){
 	}
 	
 	//Number of particles handled by each proccess. 
-	
+
 	lengthloc = finish - start;
 	
+	//Setting up arrays to use in MPI_Scatterv and MPI_Allgatherv
 	
-	//Setting up arrays to add in MPI_Scatterv and MPI_Allgatherv
+	sendsizex = new int[size](); // Array of send counts for each rank
+
+	stridex   = new int[size](); // Array of displacment from start of array for each rank
+
+
+	sendsize  = new int[size](); // Array of sizes to send for each rank
 	
-	sendsizex = new int[size]; // Array of sizes to send for each rank
-
-	stridex   = new int[size]; // Array of displacment from start of array for each rank
-
-
-	sendsize  = new int[size]; // Array of sizes to send for each rank
-	
-	stride    = new int[size]; // Array of displacment from start of array for each rank
+	stride    = new int[size](); // Array of displacment from start of array for each rank
 	
 	int k_scatter = 0;
 	
 	int scatter_start;
 	
 	int scatter_finish;
+	
+	/* Calculate send counts and displacement from start of array for each rank
+	 * for MPI_Scatterv and MPI_Gatherv
+	 */
 	
 	for (int i = 0; i < size; i++){
 		
@@ -326,20 +330,28 @@ void SPH::initMPIVariables(){
 		if (i < r){
 			
 			k_scatter++;
+			
 			scatter_start = k_scatter * i;
+			
 			scatter_finish = k_scatter * (i + 1);
+		
 		}
 		
 		else{
 			
 			scatter_start = (k_scatter + 1) * r + k_scatter * (i - r);
+		
 			scatter_finish = (k_scatter + 1) * r + k_scatter * (i - r + 1);
 			
 		}
 		
-		sendsizex[i] = (scatter_finish - scatter_start) * 2;
+		/* sendsize: Array with element [i] corresponding to sendcount for rank[i] 
+		 * stride  : Array with element [i] corresponding to displ from x_root[0][0] for rank[i]
+		 */
 		
-		stridex[i]   = scatter_start * 2;
+		sendsizex[i] = (scatter_finish - scatter_start) * 2;          //Multiplied by 2 to account for x and y coordinate 
+		
+		stridex[i]   = scatter_start * 2;							  //Multiplied by 2 to account for x and y coordinate
 		
 		sendsize[i]  = scatter_finish - scatter_start;
 		
@@ -385,7 +397,7 @@ void SPH::initRootParticles(){
 		x_root[0][1] = 0.5;
 	}
 	
-	else if (particles == "ic-two-particles"){ //REMEMBER TO CHANGE BACK TO ORIGINAL TEST CASE
+	else if (particles == "ic-two-particles"){ 
 	
 		x_root[0][0] = 0.5;
 		x_root[0][1] = 0.5;
@@ -417,12 +429,16 @@ void SPH::initRootParticles(){
 	}
 
 	else if (particles == "ic-dam-break"){
-
+		
+		/* Seeding with time was avoided so that results could be validated 
+		 * in case changes needed to be made to code.
+		 */
+		
 		for (int i = 0; i < 20; ++i){
 			for (int j = 0; j < 20; ++j){
-
-				x_root[i*20+j][0] = 0.01 +  i*0.01 + rand()/(RAND_MAX*1000.0); //Random values for noise 
-				x_root[i*20+j][1] = 0.01 +  j*0.01 + rand()/(RAND_MAX*1000.0); //Random values for noise
+				
+				x_root[i*20+j][0] = 0.01 +  i*0.01 + (double)rand()/(RAND_MAX*1000.0); //Psuedo-random values for noise 
+				x_root[i*20+j][1] = 0.01 +  j*0.01 + (double)rand()/(RAND_MAX*1000.0); //Psuedo-random values for noise
 
 			}
 		}
@@ -434,8 +450,8 @@ void SPH::initRootParticles(){
 		for (int i = 0; i < 21; ++i){
 			for (int j = 0; j < 31; ++j){
 
-				x_root[i*31+j][0] = 0.1 + i * 0.01 + rand()/(RAND_MAX*1000.0); //Random values for noise
-				x_root[i*31+j][1] = 0.3 + j * 0.01 + rand()/(RAND_MAX*1000.0);
+				x_root[i*31+j][0] = 0.1 + i * 0.01 + (double)rand()/(RAND_MAX*1000.0); //Psuedo-random values for noise
+				x_root[i*31+j][1] = 0.3 + j * 0.01 + (double)rand()/(RAND_MAX*1000.0); //Psuedo-random values for noise
 				
 			}
 		}
@@ -447,14 +463,15 @@ void SPH::initRootParticles(){
 		int Npoints[11] = {1, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60}; //No. of points on each circumference to give evenly spaced points
 		double R[11]    = {0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1}; // Radii at which the circle will be formed.
 		
-		//initialize dummy variable to aid in populatin array with evenly spaced points
+		//initialize dummy variable to aid in populating array with evenly spaced points
 		int loopdummy = 0;
 		double angledummy = 0.0;
 					
 		x_root[0][0] = 0.5;
 		x_root[0][1] = 0.7;
 					
-					
+		//No noise added as particles are not directly above or beside each other
+		
 		for (int i = 1; i < 11; ++i){
 			for (int j = Npoints[i-1]+loopdummy; j < Npoints[i] + Npoints[i-1] + loopdummy; j++){
 				
@@ -468,7 +485,7 @@ void SPH::initRootParticles(){
 		}
 					
 					
-				}
+	}
 	
 	
 }
@@ -480,56 +497,56 @@ void SPH::initLocParticles(){
 	
 	//Allocating Memory to local variable arrays
 				
-	x = new double*[lengthloc];					//Position of particles
+	x     = new double*[lengthloc];					//Position of particles
 	
-	xpool = new double[lengthloc*2]();	
+	xpool = new double[lengthloc*2]();				//Particle position pool for contiguous 2D position array
 			
-	v = new double*[lengthloc];               	//Velocity of particle
+	v     = new double*[lengthloc];               	//Velocity of particle
 	
-	vpool = new double[lengthloc*2]();
+	vpool = new double[lengthloc*2]();				//Velocity pool for contiguous 2D velocity array
 			
-	q = new double[lengthloc*N]();				//q array
+	q     = new double[lengthloc*N]();	   			//q array
 				
-	rho = new double[lengthloc]();              //Density
+	rho   = new double[lengthloc]();                //Density
 			
-	p   = new double[lengthloc]();              //Pressure
+	p     = new double[lengthloc]();                //Pressure
 			
 	//Forces
-	Fp = new double*[lengthloc];          	    //Pressure Force
+	Fp    = new double*[lengthloc];          	    //Pressure Force
+	
+	Fppool = new double[lengthloc*2]();
 			
-	Fv = new double*[lengthloc];         	    //Viscous Force
+	Fv    = new double*[lengthloc];         	    //Viscous Force
+	
+	Fvpool = new double[lengthloc*2]();
 
-	Fg = new double*[lengthloc];             	//Gravitational Force
-			
-	a  = new double*[lengthloc];              	//Acceleration
+	Fg    = new double*[lengthloc];             	//Gravitational Force
 	
-	apool = new double[lengthloc*2]();
+	Fgpool = new double[lengthloc*2]();
+			
+	a     = new double*[lengthloc];              	//Acceleration
+	
+	apool = new double[lengthloc*2]();				//Acceleration pool for contiguous 2D acceleration array
 	
 				
-	//Form contiguous 2D array for x and v so that they can be used in BLAS and MPI
+	//Form contiguous 2D array for x, v and aso that they can be used in BLAS and MPI and to exploit cache locality
 	
-	for (int i = 0; i < lengthloc; ++i, xpool += 2, vpool += 2, apool += 2){
-		x[i] = xpool;
-		v[i] = vpool;
-		a[i] = apool;
+	for (int i = 0; i < lengthloc; ++i, xpool += 2, vpool += 2, apool += 2, Fppool += 2, Fvpool += 2, Fgpool += 2){
+		x[i]  = xpool;
+		v[i]  = vpool;
+		a[i]  = apool;
+		Fp[i] = Fppool;
+		Fv[i] = Fvpool;
+		Fg[i] = Fgpool;
 	}
 				
-	for (int i = 0; i < lengthloc; i++){
-			
-	Fp[i] = new double[2]();
-				
-	Fv[i] = new double[2]();
-					
-	Fg[i] = new double[2]();
-	
-	}
 }
 
 			
 //Scatter values from x_root to x in various ranks
 
 void SPH::initX(){
-
+	 
 	MPI_Scatterv(&x_root[0][0], sendsizex, stridex, MPI_DOUBLE, &x[0][0], sendsizex[rank], MPI_DOUBLE, 0, comm);
 	
 }
@@ -544,16 +561,22 @@ void SPH::calcQRVIJ(){
 	for (int i = 0; i < lengthloc; ++i){
 		for(int j = 0; j < N; ++j){
 					
-			//Calculate r
+			//Calculate r first as it is a repeated value
 			r[0] = x[i][0] - x_root[j][0];
+			
 			r[1] = x[i][1] - x_root[j][1];
 						
-			//Calculate qij 
-			q[i*N+j] = sqrt(r[0] * r[0] + r[1] * r[1]) * hprime;
+			//Calculate qij once per timestep as it is a repeated value
+			
+			q[i*N+j] = sqrt(r[0] * r[0] + r[1] * r[1]);
 						
 						
 		}
 	}
+	
+	//Scale q matrix by hprime (1/h) using BLAS
+	
+	cblas_dscal(N * lengthloc, hprime, q, 1);
 }
 
 
@@ -562,24 +585,29 @@ void SPH::calcQRVIJ(){
 
 void SPH::calcRho(){
 				
-	//Define q_coeff
+	//Define repeated expression q_coeff
 				
 	double q_coeff;
 				
 				
 	for (int i = 0; i < lengthloc; ++i){
+		
 		for (int j = 0; j < N; ++j){
 						
 			if (q[i*N+j] < 1){
 				
 				q_coeff = 1.0 - (q[i* N + j]*q[i* N + j]);
 			
+				/* Calculating density
+				 * coeff_rho is a private variable calculated only twice, 
+				 * once when SPH is initiated and once after mass is scaled.
+				 */
+			
 				rho[i] += coeff_rho * q_coeff * q_coeff * q_coeff;
 							
 				}
 			}
 		}
-					
 					
 }
 
@@ -620,7 +648,7 @@ void SPH::calcFA(){
 				
 			if ((q[i*N+j] < 1) && ((i + start) != j)){
 				
-				//Precalculate repeated coefficients
+				//Precalculate repeated coefficients qcoeff, FP_calc and FV_calc
 				qcoeff = (1.0-q[i* N + j]);
 								
 				FP_calc =  (coeff_p * (p[i]+p_root[j]) * qcoeff * qcoeff/(rho_root[j]*q[i* N + j]));
@@ -759,12 +787,6 @@ void SPH::solver(){
 				
 		}
 
-		else{
-
-			
-			EnergyOut << setw(15) <<"Time" << " " << setw(15) <<"KE" << " " << setw(15) << "PE" << " " << setw(15) <<"TE" << endl;
-	
-	}
 				
 	//Initialize time loop
 	
@@ -775,6 +797,8 @@ void SPH::solver(){
 		cout << "Evaluating..."<< endl;
 	
 	}
+	
+	//Start time loop iteration
 	
 	while (t < T){
 					
@@ -882,6 +906,8 @@ void SPH::solver(){
 	
 		if (t == 0){
 			
+			//&a[0][0] etc are pointers to the first element in the contiguous 2D array
+			
 			cblas_daxpy((lengthloc)*2, 0.5 * dt, &a[0][0], 1, &v[0][0], 1);
 			cblas_daxpy((lengthloc)*2, dt, &v[0][0], 1, &x[0][0], 1);
 		
@@ -955,21 +981,9 @@ void SPH::solver(){
 		
 		//Reset Forces
 		
-		for (int i = 0; i < lengthloc; ++i){
-			
-			Fv[i][0] = 0;
-
-			Fv[i][1] = 0;
-
-			Fp[i][0] = 0;
-
-			Fp[i][1] = 0;
-//			cblas_dscal(2, 0, Fv[i], 1);
-//			cblas_dscal(2, 0, Fp[i], 1);
-//			cblas_dscal(2, 0, Fg[i], 1);
-		}
+		cblas_dscal(lengthloc * 2, 0.0, &Fv[0][0], 1);
 		
-
+		cblas_dscal(lengthloc * 2, 0.0, &Fp[0][0], 1);
 
 		//Increment Time step
 					
@@ -994,9 +1008,6 @@ void SPH::solver(){
 		}
 
 		else {
-						
-				
-			PositionOut<< setw(15) <<"x_coordinate" << " " << setw(15) <<"y_coordinate"<< endl; 
 
 			for (int i = 0; i < N; ++i){
 

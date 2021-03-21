@@ -23,9 +23,9 @@ void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 			("ic-two-particles", "Use two particles validation case")
 			("ic-three-particles", "Use three particles validation case")
 			("ic-four-particles", "Use four particles validation case")
-			("dt", po::value<double>(), "Select time step")
-			("T", po::value<double>(), "Total integration time")
-			("h", po::value<double>(), "Radius of influence per particle");
+			("dt", po::value<double>()->default_value(0.0001), "Select time step")
+			("T", po::value<double>()->default_value(3), "Total integration time")
+			("h", po::value<double>()->default_value(0.01), "Radius of influence per particle");
 	
 		po::store(po::parse_command_line(argc, argv, desc), vm);
 		po::notify(vm);

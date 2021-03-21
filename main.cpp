@@ -25,64 +25,85 @@ int main(int argc, char *argv[])
     
 	//START OF  BOOST STUFF
 	//Initialize Variables
-	//string InitialCondition;
+	string InitialCondition;
 	
-	//double dt, T, h;
-	
-	//po::variables_map vm;
-	
-	//check for valid inputs
-	//bool checkvalid;
-	
-	//checkvalid = Options(argc, argv, vm, InitialCondition,dt,T,h);
-	
-	//if (!checkvalid){
-		//End programme if there are invalid inputs
-		//return 0;
-	//}
-	
-	//SPH test(InitialCondition, dt, T, h, MPI_COMM_WORLD, rank, size);
-	
-	//END OF BOOST STUFF
-	
-	
-	auto begin = high_resolution_clock::now();
+	double dt, T, h;
 	
 	try{
 		
-		SPH test("ic-droplet", 0.0001, 0.4, 0.01, MPI_COMM_WORLD, rank, size);
-		
-		test.solver();
+		auto begin = high_resolution_clock::now();
 	
-		
+		po::variables_map vm;
 	
+		Options(argc, argv, vm, InitialCondition,dt,T,h);
+	
+		SPH SPHsolver(InitialCondition, dt, T, h, MPI_COMM_WORLD, rank, size);
+	
+		SPHsolver.solver();
+		
 		if (rank == 0){
+
 			auto stop = high_resolution_clock::now();
 	
 			auto duration = duration_cast<seconds>(stop - begin);
-	
+
 			cout << duration.count() << "seconds" << endl;
 		}
 		
 		MPI_Finalize();
 	}
-		
+	
 	catch (const std::bad_alloc& e) {
 		
-		cout << "An error occured: " << e.what() << endl;
+		if (rank == 0){
 		
+			cout << "An error occured: " << e.what() << endl;
+		
+		}
+		MPI_Finalize();
+		
+	}
+	
+	catch (const std::logic_error& e){
+		
+		if (rank == 0){
+		
+			cout << "An error occured: " << e.what() << endl;
+		
+		}
 		MPI_Finalize();
 	}
 	
+	
+//	auto begin = high_resolution_clock::now();
 //	
-//	if (test.checksize() == false){
+//	try{
+//		
+//		SPH test("ic-dam-break", 0.0001, 1, 0.01, MPI_COMM_WORLD, rank, size);
+//		
+//		test.solver();
+//	
+//		
+//	
+//		if (rank == 0){
+//			auto stop = high_resolution_clock::now();
+//	
+//			auto duration = duration_cast<seconds>(stop - begin);
+//	
+//			cout << duration.count() << "seconds" << endl;
+//		}
 //		
 //		MPI_Finalize();
-//		return 0;
-//		
 //	}
-//	
-//
+//		
+//	catch (const std::bad_alloc& e) {
+//		
+//		cout << "An error occured: " << e.what() << endl;
+//		
+//		MPI_Finalize();
+//	}
+	
+
 	
 	return 0;
 }
