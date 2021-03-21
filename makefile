@@ -1,15 +1,22 @@
-default:myprog
+CXX = mpicxx
+CXXFLAGS = -Wall -O3
+HDRS = CommandLineOptions.h SPH.h
+OBJS = main.o CommandLineOptions.o SPH.o
+LDLIBS = -lblas -lboost_program_options
+TARGET = myprog
 
-flags = -std=c++11 -Wall 
+default: $(TARGET)
+all: $(TARGET)
 
-main.o: main.cpp
-	mpicxx -g $(flags) -o main.o -c main.cpp
-
-CommandLineOptions.o: CommandLineOptions.cpp CommandLineOptions.h
-	mpicxx -g $(flags) -o CommandLineOptions.o -c CommandLineOptions.cpp
+%.o : %.cpp $(HDRS)
+	$(CXX) -g $(CXXFLAGS) -o $@ -c $<
 	
-SPH.o: SPH.cpp SPH.h
-	mpicxx -g $(flags) -o SPH.o -c SPH.cpp
+$(TARGET): $(OBJS)
+	$(CXX) -o $@ $^ $(LDLIBS)
 
-myprog: main.o CommandLineOptions.o SPH.o
-	mpicxx -g -o myprog main.o CommandLineOptions.o SPH.o -L. -lblas -lboost_program_options
+.PHONY: clean
+
+clean:
+	rm -f $(TARGET) *.o
+
+
