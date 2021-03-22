@@ -7,7 +7,7 @@ using namespace std;
 
 namespace po = boost::program_options;
 
-void Options(int argc, char** argv, po::variables_map &vm, string&InitialCondition, double &dt, double &T, double &h);
+void Options(int argc, char** argv, po::variables_map &vm, string&InitialCondition, double &dt, double &T, double &h, int &rank, bool &help);
 
 
 

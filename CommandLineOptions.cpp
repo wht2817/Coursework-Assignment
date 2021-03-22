@@ -8,7 +8,7 @@ using namespace std;
 
 namespace po = boost::program_options;
 
-void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondition, double &dt, double &T, double &h){
+void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondition, double &dt, double &T, double &h, int &rank, bool &help){
 		
 		//Initialize dummy count variable to help catch exceptions
 		int dummycount = 0;
@@ -32,8 +32,11 @@ void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 	
 		if (vm.count("help")){
 			
-			cout << desc << endl;
+			help = true;
 			
+			if (rank == 0){
+				cout << desc << endl;
+			}
 		}
 		
 		if (vm.count("ic-dam-break")){
@@ -75,6 +78,14 @@ void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 			dummycount++;
 		
 		}
+		
+		if (vm.count("ic-three-particles")){
+			
+			InitialCondition = "ic-three-particles";
+			
+			dummycount++;
+		}
+		
 		if (vm.count("ic-four-particles")){
 			
 			InitialCondition = "ic-four-particles";
@@ -83,6 +94,8 @@ void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 		
 		} 
 		
+		
+		//Throw error if any of these values are less than or equal to 0.
 		if ((vm["dt"].as<double>() <= 0) || (vm["T"].as<double>() <= 0) || (vm["h"].as<double>() <= 0)){
 			
 			throw std::logic_error("dt, T and h must be greater than 0");
@@ -100,6 +113,7 @@ void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 		
 		}
 		
+		//Throw error if there is more than 1 initialization condition entered
 		if (dummycount > 1){
 			
 			throw std::logic_error("Can only have 1 initialization condition.");
