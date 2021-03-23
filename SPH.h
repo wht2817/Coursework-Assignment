@@ -17,35 +17,7 @@ public:
 	
 	//Destructor
 	~SPH();
-	
-	/////
-	//Print Functions
-	/////
 		
-	void printX();
-		
-	//Print Velocity
-	void printV();
-	
-	//Print q matrix
-	void printQ(); 
-	
-	//Print Density
-	void printRho();
-	
-	//Print Pressure
-	void printP();
-	
-	//Print Mass
-	void printMass();
-	
-	//Print Forces
-	void printForce();
-		
-	//Print Acceleration
-	void printA();
-	
-	
 	/////
 	//Iteration Functions
 	/////
@@ -54,7 +26,6 @@ public:
 	void initMPIVariables();
 	
 	//Initialize Particles
-	
 	void initRootParticles();
 	
 	//Initialize Local Particles
@@ -100,13 +71,12 @@ public:
 private:
 	
 	/////////////////
-	//Define constants
+	//Define private constants
 	/////////////////
 	double k     = 2000.0; // Gas constant
 	double rho_0 = 1000.0; // Resting density
 	double mu    = 1.0;    // Viscosity
 	double g     = 9.81;   // Gravitational acceleration (May not even need to define this)
-	double h     = 0.01;   // Radius of influence
 	double e     = 0.5;    // Coefficient of restitution
 			
 	/////////////////
@@ -114,89 +84,89 @@ private:
 	/////////////////
 	double m  = 1.0;           					    // Initial Mass of particle
 			
-	double dt = 0.0001;                             //Default timestep
+	double dt = 0.0001;                             // Default timestep
 			
 	double T  = 5;                                  // Default total time
 			
-	int    N;                  						//No. of particles
+	int    N  = 0;                  				// No. of particles
+	
+	double h  = 0.01;   							// Radius of influence
 	
 	/////
 	//Process Local arrays
 	/////
 	
-	//Pointers for contiguous 2D x array		
-	double **x = nullptr;
+	/* Local contributions of each process for each variable
+	 * These represent x_i, v_i etc
+	 */
 	
-	double *xpool = nullptr;
+			
+	double **x = nullptr;							// Array of pointers to xpool
 	
-	//Pointer for array rij = xi - xj
-	double *r = new double [2]();
+	double *xpool = nullptr;						// Pointer to particle local positions
 	
-	//Pointers for contiguous 2D v array
-	double **v = nullptr;
+	double *r = new double [2]();					// Pointer to array r = xi - xj
 	
-	double *vpool = nullptr;
+	double **v = nullptr;							// Array of pointers to vpool
 	
-	//Pointer for array storing q values
-	double *q = nullptr;
+	double *vpool = nullptr;						// Pointer to particle local velocities
 	
-	//Pointer for array storing density values
-	double *rho = nullptr;
+	double *q = nullptr;							// Pointer to array of local q values
 	
-	//Pointer for array storing pressure values
-	double *p = nullptr;
+	double *rho = nullptr;							// Pointer to array of local densities
+
+	double *p = nullptr;							// Pointer to array of local pressures
 	
-	//Pointer for array storing Forces
-	double **Fp = nullptr;
+	double **Fp = nullptr;							// Array of pointers to Fppool
 	
-	double *Fppool = nullptr;
+	double *Fppool = nullptr;						// Pointer to local particle Fp
 	
-	double **Fv = nullptr;
+	double **Fv = nullptr;							// Array of pointers to Fvpool
 	
-	double *Fvpool = nullptr;
+	double *Fvpool = nullptr;						// Pointer to local particle Fv
 	
-	double **Fg = nullptr;
+	double **Fg = nullptr;							// Array of pointers to Fgpool
 	
-	double *Fgpool = nullptr;
+	double *Fgpool = nullptr;						// Pointer to local particle Fg
+
+	double **a = nullptr;							// Array of pointers to apool
 	
-	//Pointer for array storing Acceleration
-	double **a = nullptr;
+	double *apool = nullptr;						// Pointer to local particle acceleration
 	
-	double *apool = nullptr;
+	double Ek;										// Local contribution of kinetic energy
 	
-	//Energy
-	double Ek;
+	double Ep;										// Local contribution of potential energy
 	
-	double Ep;
+	double Et;										// Local contribution of total energy
 	
-	double Et;
 	/////
-	//Root parameters
+	//Root parameters and arrays
 	/////
  
 	/*
-	*Contain all the values of x, v, q, rho and p and total Ek, Ep and Et.
+	*Contains all the values of x, v, q, rho and p and total Ek, Ep and Et.
 	*Only the energies are stored exclusively on the root, the rest of the parameters can be accessed by all ranks
 	*so that calculation of forces, density and pressure can take place within each rank.
+	*These represent x_j, v_j etc...
 	*/
 	
-	double **x_root = nullptr;
+	double **x_root = nullptr;						// Array of pointers to x_rootpool
 	
-	double *x_rootpool = nullptr;
+	double *x_rootpool = nullptr;					// Pointer to all particle positions
 	
-	double **v_root = nullptr;
+	double **v_root = nullptr;						// Array of pointers to v_rootpool
 	
-	double *v_rootpool = nullptr;
+	double *v_rootpool = nullptr;					// Pointer to all particle velocities
 	
-	double Ek_root;
+	double Ek_root;									// Total kinetic energy
 	
-	double Ep_root;
+	double Ep_root;									// Total potential energy
 	
-	double Et_root;
+	double Et_root;									// Total total energy.
 	
-	double *rho_root = nullptr;
+	double *rho_root = nullptr;						// Pointer to all particle densities
 	
-	double *p_root   = nullptr;
+	double *p_root   = nullptr;						// Pointer to all particle pressures
 			
 	
 			
@@ -204,7 +174,7 @@ private:
 	//Coefficients for calculating density and forces
 	/////
 	
-	/*Only calculated twice per rank in whole code to save time
+	/*Only calculated twice per process in whole code to save time
 	 *Once when calling constructor and once after scaling mass
 	 */
 			
@@ -220,33 +190,33 @@ private:
 	//Particle Initialization String
 	/////
 	
-	string particles;
+	string particles;								// String to store initial condition
 	
 	/////
 	//MPI communicator variables
 	/////
 	
-	MPI_Comm comm;
+	MPI_Comm comm;									// MPI_COMM_WORLD
 	
-	int rank;
+	int rank;										// Process rank
 	
-	int size;
+	int size;										// Process size
 	
-	//Loop variables to evenly distribute work amongst processes
+	//Variables to evenly distribute work amongst processes and to aid in scattering and gathering
 	
-	int start;
+	int start;										// Start of send array
 	
-	int finish;
+	int finish;										// End of send array
 	
-	int lengthloc;
+	int lengthloc;									// No. of particles distributed to per process
 	
-	int *sendsizex;
+	int *sendsizex;									// Array of sendcounts for x where sendsizex[i] corresponds to sendcount for ith rank
 	
-	int *stridex;
+	int *stridex;									// Array of displ for x where stridex[i] corresponds to displ for ith rank
 	
-	int *sendsize;
+	int *sendsize;									// Array of sendcounts for p & rho where sendsize[i] corresponds to sendcount for ith rank
 	
-	int *stride;
+	int *stride;									// Array of displ for p & rho where stride[i] corresponds to displ for ith rank
 	
 	
 };

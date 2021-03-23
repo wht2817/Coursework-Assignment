@@ -10,7 +10,8 @@ namespace po = boost::program_options;
 
 void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondition, double &dt, double &T, double &h, int &rank, bool &help){
 		
-		//Initialize dummy count variable to help catch exceptions
+		//Initialize dummy count variable to help catch exceptions in case more than one initialization case is used
+		
 		int dummycount = 0;
 		
 		po::options_description desc("Available Options");
@@ -96,6 +97,7 @@ void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 		
 		
 		//Throw error if any of these values are less than or equal to 0.
+		
 		if ((vm["dt"].as<double>() <= 0) || (vm["T"].as<double>() <= 0) || (vm["h"].as<double>() <= 0)){
 			
 			throw std::logic_error("dt, T and h must be greater than 0");
@@ -114,10 +116,18 @@ void Options(int argc, char** argv, po::variables_map &vm, string &InitialCondit
 		}
 		
 		//Throw error if there is more than 1 initialization condition entered
+		
 		if (dummycount > 1){
 			
 			throw std::logic_error("Can only have 1 initialization condition.");
 			
+		}
+		
+		//Throw error if no initilaization condition is selected
+		
+		else if (dummycount == 0){
+			
+			throw std::logic_error("Please select an initial condition.");	
 		}
 	
 	

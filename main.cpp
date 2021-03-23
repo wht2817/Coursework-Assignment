@@ -20,6 +20,8 @@ int main(int argc, char *argv[])
 	
 	int err = MPI_Init(&argc, &argv);
 	
+	//End code if MPI failed to initialize
+	
 	if (err != MPI_SUCCESS){
 		
 		cout << "MPI failed to initialize." << endl;

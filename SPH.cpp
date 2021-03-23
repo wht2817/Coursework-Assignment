@@ -14,27 +14,28 @@ using namespace std;
 /////
 //Constructor
 /////
+
 SPH::SPH(string configuration, double pdt, double pT, double ph, MPI_Comm pcomm, int prank, int psize){
 	
-	//
 	
 	
-	//Assign values to private variable
-	dt = pdt;
+	//Assign values to private variables
 	
-	T  = pT;
+	dt = pdt;							// Time step
 	
-	h = ph;
+	T  = pT;							// Total simulation time
 	
-	hprime = 1.0 / h; 
+	h = ph;								// Radius of influence
 	
-	particles = configuration;
+	hprime = 1.0 / h; 					// 1/h precalculated to be used to calculate q
+	
+	particles = configuration;			// Initial condition
 				
-	this -> comm = pcomm;
+	this -> comm = pcomm;				//Communicator variable (MPI_COMM_WORLD)
 	
-	this -> rank = prank;
+	this -> rank = prank;				//Rank of process
 	
-	this -> size = psize;
+	this -> size = psize;				//No. of processes
 	
 	//Assign number of particles based on option chosen by user
 	
@@ -140,142 +141,17 @@ SPH::~SPH()
 	Member Functions
 */
 			
-			
-/*
-	Print Functions
-*/
-			
-			
-//Print Positions
-void SPH::printX(){
-
-	for (int i = 0; i < lengthloc; ++i){
-	
-		cout << "Particle "<< i+1 << endl;
-	
-		cout << x[i][0] << " " << x[i][1] << endl;
-
-	}
-	
-	for (int i = 0; i < size; ++i){
-		
-		cout << sendsizex[i] << " " << endl;
-	}
-}
-
-//Print Velocity			
-void SPH::printV(){
-
-	for (int i = 0; i < N; ++i){
-
-		cout << "Particle "<< i+1 << endl;
-		cout << v[i][0] << " " << v[i][1] << endl;
-
-	}
-}
-			
-//Print q array
-
-void SPH::printQ(){
-				
-	cout << "Q Array: " << endl;
-
-	for (int i = 0; i < lengthloc; ++i){
-		for (int j = 0; j < N; ++j){
-
-			cout << q[i*N + j] << " ";
-		}
-
-		cout << endl;
-	}
-}
-			
-//Print Rho
-void SPH::printRho(){
-	
-	cout << "Density Array:" << endl;
-	
-	for (int i = 0; i < N; ++i){
-
-		cout << rho_root[i] << " ";
-
-	}
-				
-	cout << endl;
-}
-
-//Print Pressure
-void SPH::printP(){
-	cout << "Pressure Array: " << endl;
-	
-	for (int i = 0; i < N; ++i){
-
-		cout << p_root[i] << " ";
-	}
-
-	cout << endl;
-}
-
-//Print Mass
-void SPH::printMass(){
-	
-	cout << "Mass: " << m << endl;
-}
-
-//Print Forces
-void SPH::printForce(){
-				
-	cout << "Pressure Force: " << endl;
-
-	for (int i = 0; i < lengthloc; ++i){
-
-		cout << Fp[i][0] << " " << Fp[i][1] << endl;
-
-	}
-				
-	cout << "Viscous Force: " << endl;
-
-	for (int i = 0; i < lengthloc; ++i){
-
-					cout << Fv[i][0] << " " << Fv[i][1] << endl;
-
-	}
-				
-	cout << "Gravitational Force: " << endl;
-
-	for (int i = 0; i < lengthloc; ++i){
-
-		cout << Fg[i][0] << " " << Fg[i][1] << endl;
-
-	}
-
-	cout << endl;
-
-}
-
-//Print acceleration
-			
-void SPH::printA(){
-
-	cout << "Acceleration:" << endl;
-
-	for (int i = 0; i < lengthloc; ++i){
-
-		cout << a[i][0] << " " << a[i][1] << endl;
-
-	}
-
-cout << endl;
-
-}
-			
-			
 /////
 //Iteration Functions
 /////
 
-//Initialize parameters to aid in distributing work among processors
-
+/*Initialize parameters to aid in distributing work among processors
+ * r        : Remainder of N divided by no. of processes
+ * k        : Dummy variable to determine no. of particles distributed to process
+ * lengthloc: No. of particles distributed to process
+ * sendsize : Array of sendcounts where sendsize[i] is the send count of rank[i]
+ * stride   : Array of displacement from start of send/receive buffer where stride[i] is the displacement of rank[i]
+ * */
 void SPH::initMPIVariables(){
 	
 	//Setting up parameters to distribute data evenly between proccesses
@@ -297,21 +173,19 @@ void SPH::initMPIVariables(){
 		finish   = (k + 1) * r + k * (rank -r + 1);
 	
 	}
-	
-	//Number of particles handled by each proccess. 
 
 	lengthloc = finish - start;
 	
 	//Setting up arrays to use in MPI_Scatterv and MPI_Allgatherv
 	
-	sendsizex = new int[size](); // Array of send counts for each rank
+	sendsizex = new int[size](); 			// Array of sendcounts for x and v
 
-	stridex   = new int[size](); // Array of displacment from start of array for each rank
+	stridex   = new int[size](); 			// Array of displ for x and v
 
 
-	sendsize  = new int[size](); // Array of sizes to send for each rank
+	sendsize  = new int[size](); 			// Array of sendcounts for p and rho
 	
-	stride    = new int[size](); // Array of displacment from start of array for each rank
+	stride    = new int[size](); 			// Array of displ for p and rho
 	
 	int k_scatter = 0;
 	
@@ -345,10 +219,6 @@ void SPH::initMPIVariables(){
 			
 		}
 		
-		/* sendsize: Array with element [i] corresponding to sendcount for rank[i] 
-		 * stride  : Array with element [i] corresponding to displ from x_root[0][0] for rank[i]
-		 */
-		
 		sendsizex[i] = (scatter_finish - scatter_start) * 2;          //Multiplied by 2 to account for x and y coordinate 
 		
 		stridex[i]   = scatter_start * 2;							  //Multiplied by 2 to account for x and y coordinate
@@ -362,8 +232,15 @@ void SPH::initMPIVariables(){
 	
 	
 }
-
-//Initialize root arrays and root particle positions. Data will be gathered to and scattered from these arrays.
+/* Initialize root arrays and particle position. Data will be gathered to and scattered from these arrays.
+ * Even though they are named root, they exist in all processes and correspond to x_j, v_j etc...
+ * x_root    : Array of pointers pointing to x_rootpool.
+ * x_rootpool: Pointer to contiguous block of memory containing particle positions.
+ * v_root    : Array of pointers pointing to v_rootpool.
+ * v_rootpool: Pointer to contiguous block of memory containing particle velocities.
+ * rho_root  : Array which will contain all particle densities.
+ * p_root    : Array which will contain all particle pressures.
+ */ 
 
 void SPH::initRootParticles(){
 	
@@ -460,7 +337,7 @@ void SPH::initRootParticles(){
 	else if (particles == "ic-droplet"){
 				
 		//Initialize plotting parameters
-		int Npoints[11] = {1, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60}; //No. of points on each circumference to give evenly spaced points
+		int Npoints[11] = {1, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60}; 					  //No. of points on each circumference to give evenly spaced points
 		double R[11]    = {0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1}; // Radii at which the circle will be formed.
 		
 		//initialize dummy variable to aid in populating array with evenly spaced points
@@ -491,7 +368,24 @@ void SPH::initRootParticles(){
 }
 
 
-//Initialize Local Particles, results from indiivudal proccesses will be stored in these arrays
+/* Initialize local arrays and particle positions. Data of particles allocated to a process
+ * will be stored in these arrays. These corresponding to x_i, v_i etc...
+ * x     : Array of pointers pointing to xpool.
+ * xpool : Pointer to contiguous block of memory containing particle positions.
+ * v     : Array of pointers pointing to vpool.
+ * vpool : Pointer to contiguous block of memory containing particle velocities.
+ * rho   : Array which will contain all particle densities.
+ * p     : Array which will contain all particle pressures.
+ * Fp    : Array of pointers pointing to Fppool.
+ * Fppool: Pointer to contiguous block of memory containing local pressure forces.
+ * Fv    : Array of pointers pointing to Fvpool.
+ * Fvpool: Pointer to contiguous block of memory containing local viscous forces.
+ * Fg    : Array of pointers pointing to Fgpool.
+ * Fgpool: Pointer to contiguous block of memory containing local gravitational forces.
+ * a     : Array of pointers pointing to apool.
+ * apool : Pointer to contiguous block of memory containing local acceleration.
+ * q	 : Array containing all q values.
+ */ 
 
 void SPH::initLocParticles(){
 	
@@ -529,7 +423,7 @@ void SPH::initLocParticles(){
 	apool = new double[lengthloc*2]();				//Acceleration pool for contiguous 2D acceleration array
 	
 				
-	//Form contiguous 2D array for x, v and aso that they can be used in BLAS and MPI and to exploit cache locality
+	//Form contiguous 2D arrays so that they can be used in BLAS, MPI and exploit cache locality in loops.
 	
 	for (int i = 0; i < lengthloc; ++i, xpool += 2, vpool += 2, apool += 2, Fppool += 2, Fvpool += 2, Fgpool += 2){
 		x[i]  = xpool;
@@ -543,7 +437,8 @@ void SPH::initLocParticles(){
 }
 
 			
-//Scatter values from x_root to x in various ranks
+/*Scatter sendsizex[rank] elements from x_root to x.
+ */ 
 
 void SPH::initX(){
 	 
@@ -552,7 +447,8 @@ void SPH::initX(){
 }
 			
 			
-//Precalculate array of q values
+/*Precalculate q values, storing them in the q array
+ */ 
 
 void SPH::calcQRVIJ(){
 	
@@ -562,6 +458,7 @@ void SPH::calcQRVIJ(){
 		for(int j = 0; j < N; ++j){
 					
 			//Calculate r first as it is a repeated value
+			
 			r[0] = x[i][0] - x_root[j][0];
 			
 			r[1] = x[i][1] - x_root[j][1];
@@ -581,11 +478,12 @@ void SPH::calcQRVIJ(){
 
 
 
-//Calculate Density
+/* Calculate Density
+ * q_coeff  : Precalculated repeated expression in rho calculation.
+ * coeff_rho: Repeated expression calculated during construction and after mass scaling
+ */ 
 
 void SPH::calcRho(){
-				
-	//Define repeated expression q_coeff
 				
 	double q_coeff;
 				
@@ -598,11 +496,6 @@ void SPH::calcRho(){
 				
 				q_coeff = 1.0 - (q[i* N + j]*q[i* N + j]);
 			
-				/* Calculating density
-				 * coeff_rho is a private variable calculated only twice, 
-				 * once when SPH is initiated and once after mass is scaled.
-				 */
-			
 				rho[i] += coeff_rho * q_coeff * q_coeff * q_coeff;
 							
 				}
@@ -612,7 +505,8 @@ void SPH::calcRho(){
 }
 
 
-//Calculate Pressure
+/* Calculate pressure
+ */ 
 	
 void SPH::calcP(){
 				
@@ -623,7 +517,8 @@ void SPH::calcP(){
 	}
 }
 			
-//Scale Mass
+/* Scale Mass
+ */ 
 
 void SPH::scaleMass(){
 
@@ -631,7 +526,11 @@ void SPH::scaleMass(){
 
 }
 			
-//Calculate Forces
+/* Calculate forces and acceleration
+ * qcoeff : Precalculated repeated expression in both Fv and Fp
+ * Fp_calc: Precalculated repeated expression in Fp
+ * Fv_calc: Precalculated repeated expression in Fv
+ */ 
 			
 void SPH::calcFA(){
 				
@@ -685,7 +584,8 @@ void SPH::calcFA(){
 }
 					
 			
-//Enforce boundary condition
+/* Enforce boundary conditions
+ */ 
 
 void SPH::calcBC(){
 
@@ -730,7 +630,8 @@ void SPH::calcBC(){
 		
 }
 			
-//Calculate Energy
+/*Calculate Energy
+*/
 
 void SPH::calcE(){
 				
@@ -765,7 +666,7 @@ void SPH::solver(){
 	
 	initMPIVariables();
 	
-	//Initialize Particle Positions and allocate memory into root arrays
+	//Initialize Particle Positions and allocate memory into root (shared) arrays
 	
 	initRootParticles();
 	
@@ -773,7 +674,7 @@ void SPH::solver(){
 	
 	initLocParticles();
 	
-	//Distribute positions to x arrays in individual ranks 
+	//Distribute particle positions to x arrays in individual processes
 	
 	initX();
 				
@@ -794,7 +695,7 @@ void SPH::solver(){
 	
 	if (rank == 0){
 		
-		cout << "Evaluating..."<< endl;
+		cout << "Evaluating..."<< endl; //Friendly message to let user know it is running
 	
 	}
 	
@@ -803,18 +704,7 @@ void SPH::solver(){
 	while (t < T){
 					
 					
-		//cout << "Step: " << t << endl;
-		
-//		if (rank == 0){
-//		cout << "Initial Positions: " << endl;
-//		printX();
-//					
-//		}
-					
-		//cout << "Velocities: " << endl;
-		//printV();
-					
-		//Calculate q array in each process
+		//Calculate Q
 			
 		calcQRVIJ();
 													
@@ -823,6 +713,7 @@ void SPH::solver(){
 		if (t == 0){
 			
 			//Calculate Density
+			
 			calcRho();
 
 			//Gather individual density matrices in each process to rho_root array for use in force calculations
@@ -839,19 +730,19 @@ void SPH::solver(){
 						
 			cblas_dscal(lengthloc, 0.0, rho, 1);
 						
-			//Recalculate Rho and P and gather to root arrays
+			//Recalculate Rho and P and Allgather to root arrays
 			
 			calcRho();
 			
 			MPI_Allgatherv(rho, sendsize[rank], MPI_DOUBLE, rho_root, sendsize, stride, MPI_DOUBLE, comm);					
 						
 			calcP(); 
-			
+		
 			MPI_Allgatherv(p, sendsize[rank], MPI_DOUBLE, p_root, sendsize, stride, MPI_DOUBLE, comm);
 						
-			//Rescale calculate coefficients after mass has been calculated
+			//Rescale calculate Fp and Fv coefficients after mass has been calculated
 						
-			coeff_p   = (-m/2.0)*(-30.0/(M_PI*h*h*h)); //scale the Fp value at the end
+			coeff_p   = (-m/2.0)*(-30.0/(M_PI*h*h*h));
 
 			coeff_v   = -40.0*mu*m/(M_PI*h*h*h*h);
 						     
@@ -863,52 +754,29 @@ void SPH::solver(){
 			//Calculate Density
 			
 			calcRho();
-
+			
 			MPI_Allgatherv(rho, sendsize[rank], MPI_DOUBLE, rho_root, sendsize, stride, MPI_DOUBLE, comm);
 														
 			//Calculate Pressure
+			
 			calcP();
-
+			
 			MPI_Allgatherv(p, sendsize[rank], MPI_DOUBLE, p_root, sendsize, stride, MPI_DOUBLE, comm);
 						
 		}
 		
-		
-		//printRho();
-//		if (rank == 0){
-//			
-//		cout <<"Gathered Q: " << endl;	
-//		printQ();
-//		printP();
-//					
-//		}
-		//cout << "Pressure: "<< endl;
-		//printP();
-		//cout << "Velocity Difference: " << endl;
-		//printVIJ();
-		//cout << "Mass: " << endl;
-//		printMass();
-		
-		//Caculate Forces
-					
+		//Calculate Forces and Acceleration
+			
 		calcFA();
 
-
-					
-//		if (rank == 1){
-//		cout << "Acceleration: " << endl;
-//		printX();
-//
-//		}
-
-
-		//Update values of x and v (inlined as simple functions)
+		//Update values of x and v (inlined as they are simple functions)
 	
 		if (t == 0){
 			
 			//&a[0][0] etc are pointers to the first element in the contiguous 2D array
 			
 			cblas_daxpy((lengthloc)*2, 0.5 * dt, &a[0][0], 1, &v[0][0], 1);
+			
 			cblas_daxpy((lengthloc)*2, dt, &v[0][0], 1, &x[0][0], 1);
 		
 		}
@@ -916,18 +784,10 @@ void SPH::solver(){
 		else {
 
 			cblas_daxpy((lengthloc)*2, dt, &a[0][0], 1, &v[0][0], 1);
+			
 			cblas_daxpy((lengthloc)*2, dt, &v[0][0], 1, &x[0][0], 1);
 		}
-					
-					
-//					
-//		if (rank == 0){
-////		cout << "Positions and velocitybefore bc: " << endl;
-//		printX();
-//		printV();
-//		printA();
-//		}
-					
+							
 		//Validate Boundary conditions
 		
 		calcBC();
@@ -935,38 +795,28 @@ void SPH::solver(){
 		//Calculate energy
 		
 		calcE();
-					
-//		cout << "Rank EK:" << rank << " " << Ek << endl;
 	
 		//Gather individual position and velocity contributions into x_root and v_root on all processes for use in next iteration
 		
 		MPI_Allgatherv(&x[0][0], sendsizex[rank], MPI_DOUBLE, &x_root[0][0], sendsizex, stridex, MPI_DOUBLE, comm);
+		
 		MPI_Allgatherv(&v[0][0], sendsizex[rank], MPI_DOUBLE, &v_root[0][0], sendsizex, stridex, MPI_DOUBLE, comm);
 
-		//Sum energy contributions from each process onto root process via reduce
+		//Sum energy contributions from each process onto root process via reduce and MPI_SUM
 				
 		MPI_Reduce(&Ek, &Ek_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
+		
 		MPI_Reduce(&Ep, &Ep_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
+		
 		MPI_Reduce(&Et, &Et_root, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
-
-//		cout << "Updated Positions and velocities: " << endl;
-					
-					
-		//Only output energy values if rank 0
+										
+		//Only output energy values to file only if rank 0
 		
 		if (rank == 0){
-//			printForce();
-//			printQ();
-//			printX();
-//			printRho();
-//			printV();
+
 					
-//			cout << "Energies: " << endl;
-//			cout << "KE:" << Ek << endl;
-//			cout << "PE:" << Ep << endl;
-//			cout << "TE:" << Et << endl;
-//					
 			//Output Energy values into file
+
 			EnergyOut << setprecision(5) << setw(15) << t << " "<< setprecision(5) << setw(15) << Ek_root << " " << setprecision(5) << setw(15) << Ep_root << " " << setprecision(5) << setw(15) << Et_root << endl;
 	
 		}
@@ -994,10 +844,11 @@ void SPH::solver(){
 	}
 				
 				
-				
+	//Output particle positions into file only in rank 0	
+			
 	if (rank == 0){
 
-		//Output particle positions into file only in rank 0
+		
 		
 		ofstream PositionOut("output.txt", ios::out | ios::trunc);
 				
@@ -1011,7 +862,7 @@ void SPH::solver(){
 
 			for (int i = 0; i < N; ++i){
 
-				PositionOut << setprecision(5) << setw(15) << x_root[i][0] << " " << setprecision(5) <<setw(15) << x_root[i][1]<< endl;
+				PositionOut << setprecision(5) << setw(20) << x_root[i][0] << setprecision(5) <<setw(20) << x_root[i][1]<< endl;
 
 			}
 			
